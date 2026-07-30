@@ -5,6 +5,7 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --primary: #166534;
+  --primary-dark: #14532d;
   --text: #222;
   --muted: #666;
   --border: #d7d7d7;
@@ -45,10 +46,12 @@ p {
   line-height: 1.9;
 }
 .app-shell {
+  display: flex;
   min-height: 100vh;
-}
+  flex-direction: column;}
 .page-content {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 60vh;
 }
 .container {
   width: min(1080px, calc(100% - 32px));
@@ -93,6 +96,119 @@ p {
   color: var(--primary);
   font-weight: 700;
 }
+.site-footer {
+  padding-top: 30px;
+  color: #444;
+  background: #fff;
+  border-top: 1px solid var(--border);
+}
+.footer-content {
+  display: flex;
+  padding-bottom: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 30px;
+}
+.footer-about p {
+  max-width: 480px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.site-header {
+  position: relative;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+.header-inner {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: 28px;
+}
+.brand {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+}
+.brand-mark {
+  display: grid;
+  width: 58px;
+  height: 38px;
+  place-items: center;
+  color: #fff;
+  background: var(--primary);
+  border-radius: 4px;
+  font-size: 20px;
+  font-weight: 900;
+}
+.brand-copy {
+  display: grid;
+  line-height: 1.25;
+}
+.brand-copy strong {
+  font-size: 17px;
+}
+.brand-copy small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nav-link {
+  padding: 9px 11px;
+  color: #444;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.nav-link:hover,
+.nav-link.active {
+  color: var(--primary);
+  background: #eef6f0;
+}
+.login-link {
+  display: inline-flex;
+  min-height: 40px;
+  margin-right: auto;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #fff;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.login-link:hover {
+  background: var(--primary-dark);
+}
+.menu-button {
+  display: none;
+  width: 40px;
+  height: 40px;
+  margin-right: auto;
+  padding: 0;
+  place-items: center;
+  color: #333;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
 @media (max-width: 600px) {
   .page-section {
     padding: 32px 0;
@@ -100,5 +216,12 @@ p {
   .intro-panel,
   .simple-message {
     padding: 22px;
+  }
+  .login-link {
+    font-size: 0;
+  }
+  .login-link svg {
+    width: 20px;
+    height: 20px;
   }
 }
