@@ -3,21 +3,13 @@ import AppLayout from './layouts/AppLayout.jsx';
 import HomePage from './pages/HomePage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import PlaceholderPage from './pages/PlaceholderPage.jsx';
-
+import TicketsPage from './pages/TicketsPage.jsx';
 export default function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
         <Route index element={<HomePage />} />
-        <Route
-          path="tickets"
-          element={(
-            <PlaceholderPage
-              title="مسابقات و بلیط‌ها"
-              description="جستجو و فهرست بلیط ها."
-            />
-          )}
-        />
+        <Route path="tickets" element={<TicketsPage />} />
         <Route
           path="auth"
           element={(
