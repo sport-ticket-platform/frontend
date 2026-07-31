@@ -12,19 +12,20 @@ import {
 } from 'lucide-react';
 import TeamBadge from '../components/TeamBadge.jsx';
 import { tickets } from '../data/mockData.js';
-
+import { useAuth } from '../context/AuthContext.jsx';
 const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value);
 
 export default function TicketDetailsPage() {
   const { ticketId } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [quantity, setQuantity] = useState(1);
+  const [reservationMessage, setReservationMessage] = useState('');
 
   const ticket = useMemo(
     () => tickets.find((item) => item.id === ticketId),
     [ticketId],
   );
-
   if (!ticket) {
     return (
       <section className="page-section">
@@ -42,11 +43,17 @@ export default function TicketDetailsPage() {
   const totalPrice = ticket.price * quantity;
 
   const continueReservation = () => {
+    if (isAuthenticated) {
+      setReservationMessage('حساب کاربری شما فعال است. مرحله رزرو و پرداخت در کامیت بعدی اضافه می‌شود.');
+      return;
+    }
+
     navigate('/auth', {
       state: {
         from: `/tickets/${ticket.id}`,
         ticketId: ticket.id,
         quantity,
+        message: 'برای ادامه فرایند رزرو، ابتدا وارد حساب کاربری شوید.',
       },
     });
   };
@@ -186,8 +193,19 @@ export default function TicketDetailsPage() {
           </button>
 
           <p className="booking-note">
-            برای ثبت رزرو باید وارد حساب کاربری شوید. فرم واقعی ورود در کامیت بعدی اضافه می‌شود.
+           برای ثبت رزرو باید وارد حساب کاربری شوید.
           </p>
+          <p className="booking-note">
+            {isAuthenticated
+              ? ' .....'
+              : 'برای ثبت رزرو باید وارد حساب کاربری شوید.'}
+          </p>
+
+          {reservationMessage && (
+            <div className="form-message info booking-message">
+              {reservationMessage}
+            </div>
+          )}
         </aside>
       </section>
     </div>

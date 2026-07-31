@@ -1,15 +1,23 @@
 import { useState } from 'react';
-import { Menu, UserRound, X } from 'lucide-react';
-import { Link, NavLink } from 'react-router-dom';
+import { LogOut, Menu, UserRound, X } from 'lucide-react';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import Logo from './Logo.jsx';
-
+import { useAuth } from '../context/AuthContext.jsx';
 const navClassName = ({ isActive }) =>
   `nav-link${isActive ? ' active' : ''}`;
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
 
   const closeMenu = () => setMenuOpen(false);
+
+  const handleLogout = async () => {
+    await logout();
+    closeMenu();
+    navigate('/');
+  };
 
   return (
     <header className="site-header">
@@ -39,10 +47,23 @@ export default function Header() {
           </NavLink>
         </nav>
 
-        <Link className="login-link" to="/auth" onClick={closeMenu}>
-          <UserRound size={18} />
-          ورود / ثبت‌نام
-        </Link>
+        {isAuthenticated ? (
+          <div className="signed-in-actions">
+            <span className="signed-in-user">
+              <UserRound size={17} />
+              {user?.firstName || 'کاربر'} {user?.lastName || ''}
+            </span>
+            <button className="logout-button" type="button" onClick={handleLogout}>
+              <LogOut size={17} />
+              خروج
+            </button>
+          </div>
+        ) : (
+          <Link className="login-link" to="/auth" onClick={closeMenu}>
+            <UserRound size={18} />
+            ورود / ثبت‌نام
+          </Link>
+        )}
       </div>
     </header>
   );
