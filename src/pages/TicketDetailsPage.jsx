@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowRight,
@@ -11,8 +11,10 @@ import {
   Users,
 } from 'lucide-react';
 import TeamBadge from '../components/TeamBadge.jsx';
-import { tickets } from '../data/mockData.js';
+import Loading from '../components/Loading.jsx';
+import { ticketService } from '../services/ticketService.js';
 import { useAuth } from '../context/AuthContext.jsx';
+
 const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value);
 
 export default function TicketDetailsPage() {
@@ -20,12 +22,32 @@ export default function TicketDetailsPage() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [quantity, setQuantity] = useState(1);
+  const [ticket, setTicket] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [reserving, setReserving] = useState(false);
   const [reservationMessage, setReservationMessage] = useState('');
 
-  const ticket = useMemo(
-    () => tickets.find((item) => item.id === ticketId),
-    [ticketId],
-  );
+  useEffect(() => {
+    let active = true;
+
+    ticketService.getById(ticketId)
+      .then((result) => {
+        if (active) setTicket(result);
+      })
+      .catch((error) => {
+        if (active) setReservationMessage(error.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [ticketId]);
+
+  if (loading) return <Loading label="در حال دریافت جزئیات بلیط..." />;
+
   if (!ticket) {
     return (
       <section className="page-section">
@@ -42,20 +64,28 @@ export default function TicketDetailsPage() {
 
   const totalPrice = ticket.price * quantity;
 
-  const continueReservation = () => {
-    if (isAuthenticated) {
-      setReservationMessage('حساب کاربری شما فعال است. مرحله رزرو و پرداخت در کامیت بعدی اضافه می‌شود.');
+  const continueReservation = async () => {
+    if (!isAuthenticated) {
+      navigate('/auth', {
+        state: {
+          from: `/tickets/${ticket.id}`,
+          message: 'برای ادامه فرایند رزرو، ابتدا وارد حساب کاربری شوید.',
+        },
+      });
       return;
     }
 
-    navigate('/auth', {
-      state: {
-        from: `/tickets/${ticket.id}`,
-        ticketId: ticket.id,
-        quantity,
-        message: 'برای ادامه فرایند رزرو، ابتدا وارد حساب کاربری شوید.',
-      },
-    });
+    setReserving(true);
+    setReservationMessage('');
+
+    try {
+      await ticketService.reserve(ticket.id, quantity);
+      navigate(`/checkout/${ticket.id}`);
+    } catch (error) {
+      setReservationMessage(error.message);
+    } finally {
+      setReserving(false);
+    }
   };
 
   return (
