@@ -121,11 +121,11 @@ export default function CheckoutPage() {
             <strong>{paymentResult.trackingCode}</strong>
           </div>
           <div className="payment-success-actions">
-            <Link className="primary-button" to="/tickets">
-              خرید بلیط دیگر
+            <Link className="primary-button" to="/dashboard">
+              مشاهده خریدهای من
             </Link>
-            <Link className="secondary-button" to="/">
-              بازگشت به صفحه اصلی
+            <Link className="secondary-button" to="/tickets">
+              خرید بلیط دیگر
             </Link>
           </div>
         </div>
@@ -167,7 +167,7 @@ export default function CheckoutPage() {
               />
               <span>
                 <strong>کارت بانکی</strong>
-                <small>پرداخت از درگاه محلی</small>
+                <small>پرداخت آزمایشی از درگاه محلی</small>
               </span>
             </label>
 
@@ -181,7 +181,7 @@ export default function CheckoutPage() {
               />
               <span>
                 <strong>کیف پول</strong>
-                <small>پرداخت از موجودی حساب</small>
+                <small>پرداخت از موجودی آزمایشی حساب</small>
               </span>
             </label>
 
@@ -194,7 +194,7 @@ export default function CheckoutPage() {
                 onChange={(event) => setPaymentMethod(event.target.value)}
               />
               <span>
-                <strong>درگاه محلی</strong>
+                <strong>درگاه محلی پروژه</strong>
                 <small>بدون اتصال به شبکه بانکی واقعی</small>
               </span>
             </label>

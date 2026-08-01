@@ -107,4 +107,14 @@ export const ticketService = {
     });
     return unwrap(payload);
   },
+
+  async getBookings() {
+    if (apiConfig.ticketMocks) {
+      await delay(180);
+      return storage.get('reservations', []);
+    }
+
+    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/bookings`);
+    return unwrap(payload);
+  },
 };

@@ -37,6 +37,12 @@ export function AuthProvider({ children }) {
     return syncSession(session);
   }, [syncSession]);
 
+  const updateUser = useCallback((updatedUser) => {
+    storage.set('user', updatedUser);
+    setUser(updatedUser);
+    return updatedUser;
+  }, []);
+
   const logout = useCallback(async () => {
     await authService.logout();
     setUser(null);
@@ -52,8 +58,9 @@ export function AuthProvider({ children }) {
     signupInitiate: authService.signupInitiate,
     signupVerify: authService.signupVerify,
     completeSignup,
+    updateUser,
     logout,
-  }), [user, loginWithPassword, verifyOtp, completeSignup, logout]);
+  }), [user, loginWithPassword, verifyOtp, completeSignup, updateUser, logout]);
 
   return (
     <AuthContext.Provider value={value}>

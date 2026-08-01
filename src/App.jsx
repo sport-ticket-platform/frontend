@@ -7,6 +7,8 @@ import TicketsPage from './pages/TicketsPage.jsx';
 import TicketDetailsPage from './pages/TicketDetailsPage.jsx';
 import AuthPage from './pages/AuthPage.jsx';
 import CheckoutPage from './pages/CheckoutPage.jsx';
+import DashboardPage from './pages/DashboardPage.jsx';
+
 export default function App() {
   return (
     <Routes>
@@ -15,9 +17,12 @@ export default function App() {
         <Route path="tickets" element={<TicketsPage />} />
         <Route path="tickets/:ticketId" element={<TicketDetailsPage />} />
         <Route path="auth" element={<AuthPage />} />
+
         <Route element={<ProtectedRoute />}>
-        <Route path="checkout/:ticketId" element={<CheckoutPage />} />
+          <Route path="checkout/:ticketId" element={<CheckoutPage />} />
+          <Route path="dashboard" element={<DashboardPage />} />
         </Route>
+
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

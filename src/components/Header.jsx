@@ -49,10 +49,10 @@ export default function Header() {
 
         {isAuthenticated ? (
           <div className="signed-in-actions">
-            <span className="signed-in-user">
+            <Link className="signed-in-user" to="/dashboard" onClick={closeMenu}>
               <UserRound size={17} />
               {user?.firstName || 'کاربر'} {user?.lastName || ''}
-            </span>
+            </Link>
             <button className="logout-button" type="button" onClick={handleLogout}>
               <LogOut size={17} />
               خروج
