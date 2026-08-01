@@ -199,7 +199,6 @@ export default function AuthPage() {
               </button>
             </div>
           )}
-
           {message && (
             <div className={`form-message ${message.type}`} role="status">
               {message.text}

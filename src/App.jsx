@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
 import AppLayout from './layouts/AppLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
+import SupportRoute from './components/SupportRoute.jsx';
 import HomePage from './pages/HomePage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import TicketsPage from './pages/TicketsPage.jsx';
@@ -10,6 +11,7 @@ import CheckoutPage from './pages/CheckoutPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import CancellationPage from './pages/CancellationPage.jsx';
 import ReportIssuePage from './pages/ReportIssuePage.jsx';
+import SupportPage from './pages/SupportPage.jsx';
 
 export default function App() {
   return (
@@ -19,14 +21,15 @@ export default function App() {
         <Route path="tickets" element={<TicketsPage />} />
         <Route path="tickets/:ticketId" element={<TicketDetailsPage />} />
         <Route path="auth" element={<AuthPage />} />
-
         <Route element={<ProtectedRoute />}>
           <Route path="checkout/:ticketId" element={<CheckoutPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="dashboard/bookings/:bookingId/cancel" element={<CancellationPage />} />
           <Route path="dashboard/bookings/:bookingId/report" element={<ReportIssuePage />} />
         </Route>
-
+        <Route element={<SupportRoute />}>
+          <Route path="support" element={<SupportPage />} />
+        </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

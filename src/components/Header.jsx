@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { LogOut, Menu, UserRound, X } from 'lucide-react';
+import { Headphones, LogOut, Menu, UserRound, X } from 'lucide-react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import Logo from './Logo.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+
 const navClassName = ({ isActive }) =>
   `nav-link${isActive ? ' active' : ''}`;
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, isSupport, logout } = useAuth();
   const navigate = useNavigate();
 
   const closeMenu = () => setMenuOpen(false);
@@ -18,6 +19,7 @@ export default function Header() {
     closeMenu();
     navigate('/');
   };
+
 
   return (
     <header className="site-header">
@@ -45,12 +47,21 @@ export default function Header() {
           <NavLink className={navClassName} to="/tickets">
             مسابقات و بلیط‌ها
           </NavLink>
+          {isSupport && (
+            <NavLink className={navClassName} to="/support">
+              پنل پشتیبانی
+            </NavLink>
+          )}
         </nav>
 
         {isAuthenticated ? (
           <div className="signed-in-actions">
-            <Link className="signed-in-user" to="/dashboard" onClick={closeMenu}>
-              <UserRound size={17} />
+            <Link
+              className="signed-in-user"
+              to={isSupport ? '/support' : '/dashboard'}
+              onClick={closeMenu}
+            >
+              {isSupport ? <Headphones size={17} /> : <UserRound size={17} />}
               {user?.firstName || 'کاربر'} {user?.lastName || ''}
             </Link>
             <button className="logout-button" type="button" onClick={handleLogout}>
