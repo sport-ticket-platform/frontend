@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarDays,
+  CircleAlert,
   CreditCard,
+  Flag,
   MapPin,
   PencilLine,
   ReceiptText,
+  RotateCcw,
   TicketCheck,
   UserRound,
 } from 'lucide-react';
@@ -20,6 +23,15 @@ const paymentMethodLabels = {
   bank_card: 'کارت بانکی',
   wallet: 'کیف پول',
   local_gateway: 'درگاه محلی',
+};
+
+const reportCategoryLabels = {
+  payment: 'مشکل در پرداخت',
+  ticket_info: 'اشتباه در اطلاعات بلیط',
+  seat: 'مشکل در جایگاه یا صندلی',
+  schedule: 'تغییر زمان مسابقه',
+  unexpected_cancel: 'کنسلی غیرمنتظره',
+  other: 'سایر موارد',
 };
 
 function formatDate(value) {
@@ -38,6 +50,7 @@ export default function DashboardPage() {
   const { user, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('bookings');
   const [bookings, setBookings] = useState([]);
+  const [reports, setReports] = useState([]);
   const [profile, setProfile] = useState(user || {});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,11 +61,13 @@ export default function DashboardPage() {
 
     Promise.all([
       ticketService.getBookings(),
+      ticketService.getReports(),
       userService.getProfile().catch(() => user),
     ])
-      .then(([items, fetchedProfile]) => {
+      .then(([items, reportItems, fetchedProfile]) => {
         if (!active) return;
         setBookings(Array.isArray(items) ? items : []);
+        setReports(Array.isArray(reportItems) ? reportItems : []);
         if (fetchedProfile) setProfile({ ...user, ...fetchedProfile });
       })
       .catch((error) => {
@@ -144,6 +159,14 @@ export default function DashboardPage() {
             <ReceiptText size={18} />
             تراکنش‌ها
           </button>
+          <button
+            className={activeTab === 'reports' ? 'active' : ''}
+            type="button"
+            onClick={() => setActiveTab('reports')}
+          >
+            <Flag size={18} />
+            گزارش‌های من
+          </button>
         </aside>
 
         <main className="dashboard-main">
@@ -182,7 +205,7 @@ export default function DashboardPage() {
               <div className="dashboard-panel-title">
                 <div>
                   <h2>خریدها و رزروها</h2>
-                  <p>بلیط‌های پرداخت‌شده شما در این بخش نمایش داده می‌شوند.</p>
+                  <p>وضعیت بلیط، کنسلی و گزارش مشکلات را از این قسمت مدیریت کنید.</p>
                 </div>
                 <Link className="secondary-button dashboard-small-button" to="/tickets">
                   خرید بلیط جدید
@@ -202,10 +225,13 @@ export default function DashboardPage() {
                 <div className="booking-history-list">
                   {bookings.map((booking) => {
                     const ticket = booking.ticket || {};
+                    const isCancelled = booking.status === 'cancelled';
                     return (
-                      <article className="booking-history-item" key={booking.id}>
+                      <article className={`booking-history-item ${isCancelled ? 'cancelled' : ''}`} key={booking.id}>
                         <div className="booking-history-main">
-                          <span className="booking-status">{booking.statusLabel || 'پرداخت‌شده'}</span>
+                          <span className={`booking-status ${isCancelled ? 'cancelled' : ''}`}>
+                            {booking.statusLabel || 'پرداخت‌شده'}
+                          </span>
                           <h3>{ticket.homeTeam || 'تیم میزبان'} - {ticket.awayTeam || 'تیم مهمان'}</h3>
                           <p><CalendarDays size={15} /> {ticket.date || 'تاریخ ثبت نشده'}، ساعت {ticket.time || '--:--'}</p>
                           <p><MapPin size={15} /> {ticket.venue || 'محل برگزاری ثبت نشده'}</p>
@@ -214,13 +240,24 @@ export default function DashboardPage() {
                           <span>تعداد: <strong>{formatNumber(booking.quantity || 1)}</strong></span>
                           <span>جایگاه: <strong>{ticket.section || ticket.category || 'عادی'}</strong></span>
                           <span>خرید: <strong>{formatDate(booking.paidAt)}</strong></span>
+                          {isCancelled && (
+                            <span>استرداد: <strong>{formatNumber(booking.refundAmount)} تومان</strong></span>
+                          )}
                         </div>
                         <div className="booking-history-price">
                           <span>مبلغ پرداختی</span>
                           <strong>{formatNumber(booking.amount)} تومان</strong>
-                          {ticket.id && (
-                            <Link to={`/tickets/${ticket.id}`}>مشاهده مسابقه</Link>
-                          )}
+                          <div className="booking-actions">
+                            {ticket.id && <Link to={`/tickets/${ticket.id}`}>مشاهده مسابقه</Link>}
+                            {!isCancelled && (
+                              <Link className="cancel-action" to={`/dashboard/bookings/${booking.id}/cancel`}>
+                                <RotateCcw size={14} /> کنسلی
+                              </Link>
+                            )}
+                            <Link className="report" to={`/dashboard/bookings/${booking.id}/report`}>
+                              <CircleAlert size={14} /> گزارش مشکل
+                            </Link>
+                          </div>
                         </div>
                       </article>
                     );
@@ -320,6 +357,43 @@ export default function DashboardPage() {
                       <span>{formatDate(booking.paidAt)}</span>
                       <strong>{formatNumber(booking.amount)} تومان</strong>
                     </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeTab === 'reports' && (
+            <section className="dashboard-panel">
+              <div className="dashboard-panel-title">
+                <div>
+                  <h2>گزارش‌های ثبت‌شده</h2>
+                  <p>وضعیت گزارش‌هایی که برای پشتیبان ارسال کرده‌اید.</p>
+                </div>
+                <Flag size={22} />
+              </div>
+
+              {reports.length === 0 ? (
+                <div className="dashboard-empty compact">
+                  <Flag size={34} />
+                  <h3>هنوز گزارشی ثبت نشده است</h3>
+                  <p>برای ثبت گزارش، از بخش خریدها گزینه «گزارش مشکل» را انتخاب کنید.</p>
+                </div>
+              ) : (
+                <div className="reports-list">
+                  {reports.map((report) => (
+                    <article className="report-history-item" key={report.id}>
+                      <div>
+                        <span className="report-status">{report.statusLabel || 'در انتظار بررسی'}</span>
+                        <h3>{reportCategoryLabels[report.category] || 'گزارش بلیط'}</h3>
+                        <p>{report.ticket?.homeTeam} - {report.ticket?.awayTeam}</p>
+                      </div>
+                      <p className="report-description">{report.description}</p>
+                      <div className="report-meta">
+                        <span>شناسه: {report.id}</span>
+                        <span>{formatDate(report.createdAt)}</span>
+                      </div>
+                    </article>
                   ))}
                 </div>
               )}

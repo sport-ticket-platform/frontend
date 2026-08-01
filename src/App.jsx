@@ -8,6 +8,8 @@ import TicketDetailsPage from './pages/TicketDetailsPage.jsx';
 import AuthPage from './pages/AuthPage.jsx';
 import CheckoutPage from './pages/CheckoutPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
+import CancellationPage from './pages/CancellationPage.jsx';
+import ReportIssuePage from './pages/ReportIssuePage.jsx';
 
 export default function App() {
   return (
@@ -21,6 +23,8 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="checkout/:ticketId" element={<CheckoutPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="dashboard/bookings/:bookingId/cancel" element={<CancellationPage />} />
+          <Route path="dashboard/bookings/:bookingId/report" element={<ReportIssuePage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />
