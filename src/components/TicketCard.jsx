@@ -2,7 +2,7 @@ import { CalendarDays, Clock3, MapPin, Ticket, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import TeamBadge from './TeamBadge.jsx';
 
-const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value);
+const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value || 0);
 
 export default function TicketCard({ ticket }) {
   return (
@@ -25,14 +25,17 @@ export default function TicketCard({ ticket }) {
         <span><CalendarDays size={16} /> {ticket.date}</span>
         <span><Clock3 size={16} /> {ticket.time}</span>
         <span><MapPin size={16} /> {ticket.venue}</span>
-        <span><Users size={16} /> {formatNumber(ticket.remaining)} بلیط باقی مانده</span>
+        <span>
+          <Users size={16} />
+          {formatNumber(ticket.remaining)} {ticket.availabilityLabel || 'بلیط باقی مانده'}
+        </span>
       </div>
 
       <div className="ticket-card-footer">
         <div className="ticket-price">
-          <small>شروع قیمت از</small>
-          <strong>{formatNumber(ticket.price)}</strong>
-          <span>تومان</span>
+          <small>{ticket.price > 0 ? 'شروع قیمت از' : 'قیمت'}</small>
+          <strong>{ticket.price > 0 ? formatNumber(ticket.price) : 'ثبت نشده'}</strong>
+          {ticket.price > 0 && <span>تومان</span>}
         </div>
         <Link className="ticket-detail-link" to={`/tickets/${ticket.id}`}>
           <Ticket size={17} />

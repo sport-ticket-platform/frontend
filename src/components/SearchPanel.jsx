@@ -1,7 +1,14 @@
 import { Search } from 'lucide-react';
-import { cities, sports } from '../data/mockData.js';
+import { cities as fallbackCities, sports as fallbackSports } from '../data/mockData.js';
 
-export default function SearchPanel({ filters, onChange, onSubmit }) {
+export default function SearchPanel({
+  filters,
+  onChange,
+  onSubmit,
+  sports = fallbackSports,
+  cities = fallbackCities,
+  disabled = false,
+}) {
   const updateField = (event) => {
     onChange({
       ...filters,
@@ -21,13 +28,20 @@ export default function SearchPanel({ filters, onChange, onSubmit }) {
             value={filters.q}
             onChange={updateField}
             placeholder="مثلاً پرسپولیس یا آزادی"
+            disabled={disabled}
           />
         </div>
       </div>
 
       <div className="field">
         <label htmlFor="sport">نوع ورزش</label>
-        <select id="sport" name="sport" value={filters.sport} onChange={updateField}>
+        <select
+          id="sport"
+          name="sport"
+          value={filters.sport}
+          onChange={updateField}
+          disabled={disabled}
+        >
           <option value="">همه ورزش‌ها</option>
           {sports.map((sport) => (
             <option key={sport.value} value={sport.value}>
@@ -39,7 +53,13 @@ export default function SearchPanel({ filters, onChange, onSubmit }) {
 
       <div className="field">
         <label htmlFor="city">شهر</label>
-        <select id="city" name="city" value={filters.city} onChange={updateField}>
+        <select
+          id="city"
+          name="city"
+          value={filters.city}
+          onChange={updateField}
+          disabled={disabled}
+        >
           <option value="">همه شهرها</option>
           {cities.map((city) => (
             <option key={city} value={city}>{city}</option>
@@ -49,7 +69,14 @@ export default function SearchPanel({ filters, onChange, onSubmit }) {
 
       <div className="field">
         <label htmlFor="date">تاریخ مسابقه</label>
-        <input id="date" name="date" type="date" value={filters.date} onChange={updateField} />
+        <input
+          id="date"
+          name="date"
+          type="date"
+          value={filters.date}
+          onChange={updateField}
+          disabled={disabled}
+        />
       </div>
 
       <div className="field">
@@ -62,6 +89,7 @@ export default function SearchPanel({ filters, onChange, onSubmit }) {
           value={filters.minPrice}
           onChange={updateField}
           placeholder="مثلاً ۳۰۰۰۰۰"
+          disabled={disabled}
         />
       </div>
 
@@ -75,11 +103,12 @@ export default function SearchPanel({ filters, onChange, onSubmit }) {
           value={filters.maxPrice}
           onChange={updateField}
           placeholder="مثلاً ۱۵۰۰۰۰۰"
+          disabled={disabled}
         />
       </div>
 
-      <button className="primary-button search-button" type="submit">
-        جستجوی بلیط
+      <button className="primary-button search-button" type="submit" disabled={disabled}>
+        {disabled ? 'در حال دریافت...' : 'جستجوی بلیط'}
       </button>
     </form>
   );
