@@ -122,11 +122,19 @@ function normalizeSelection(ticket, selection) {
   };
 }
 
-function createLocalReservation(ticket, selected) {
+function createStoredReservation(ticket, selected, data = null, source = 'mock') {
   const unitPrice = Number(selected.config?.price || ticket.price || 0);
+  const orderId = data?.order_id ?? data?.orderId ?? null;
+  const expiresAt = data?.expires_at
+    || data?.expiresAt
+    || new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const id = orderId === null
+    ? `rs-${Date.now()}`
+    : String(orderId);
 
   return {
-    id: `rs-${Date.now()}`,
+    id,
+    orderId,
     ticketId: String(ticket.id),
     matchId: Number(ticket.matchId || ticket.id),
     configId: selected.config?.configId || null,
@@ -137,8 +145,10 @@ function createLocalReservation(ticket, selected) {
     unitPrice,
     amount: unitPrice * selected.quantity,
     status: 'reserved',
+    statusLabel: source === 'backend' ? 'رزروشده در بک‌اند' : 'رزروشده آزمایشی',
+    reservationSource: source,
     createdAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    expiresAt,
     ticket,
   };
 }
@@ -156,6 +166,7 @@ export const ticketService = {
     }
 
     const selected = normalizeSelection(ticket, selection);
+    const uniqueSeatIds = [...new Set(selected.seatIds)];
 
     if (selected.quantity < 1) {
       throw new Error('حداقل یک صندلی آزاد را انتخاب کنید.');
@@ -165,16 +176,49 @@ export const ticketService = {
       throw new Error('در هر رزرو حداکثر چهار صندلی قابل انتخاب است.');
     }
 
+    if (uniqueSeatIds.length !== selected.quantity) {
+      throw new Error('در انتخاب شما شناسه صندلی تکراری یا نامعتبر وجود دارد.');
+    }
+
+    if (uniqueSeatIds.some((seatId) => !Number.isInteger(seatId) || seatId < 1)) {
+      throw new Error('شناسه یکی از صندلی‌های انتخاب‌شده معتبر نیست.');
+    }
+
     if (selected.selectedSeats.some((seat) => seat.isReserved)) {
       throw new Error('یکی از صندلی‌های انتخاب‌شده قبلاً رزرو شده است.');
     }
 
-    if (!apiConfig.reservationMocks) {
-      throw new Error('اتصال رزرو واقعی در کامیت ششم فعال می‌شود.');
+    if (apiConfig.reservationMocks) {
+      await delay();
+      const reservation = createStoredReservation(ticket, selected);
+      storage.set('activeReservation', reservation);
+      return reservation;
     }
 
-    await delay();
-    const reservation = createLocalReservation(ticket, selected);
+    const payload = await apiRequest(`${apiConfig.reservationBaseUrl}/reserve`, {
+      method: 'POST',
+      body: JSON.stringify({ seat_ids: uniqueSeatIds }),
+    });
+    const data = unwrap(payload);
+
+    const orderId = data?.order_id ?? data?.orderId;
+    const expiresAt = data?.expires_at || data?.expiresAt;
+
+    if (orderId === null || orderId === undefined || String(orderId).trim() === '') {
+      throw new Error('شناسه سفارش از سرویس رزرو دریافت نشد.');
+    }
+
+    if (!expiresAt || Number.isNaN(new Date(expiresAt).getTime())) {
+      throw new Error('زمان انقضای معتبر از سرویس رزرو دریافت نشد.');
+    }
+
+    const reservation = createStoredReservation(
+      ticket,
+      { ...selected, seatIds: uniqueSeatIds },
+      data,
+      'backend',
+    );
+
     storage.set('activeReservation', reservation);
     return reservation;
   },

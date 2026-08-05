@@ -114,7 +114,6 @@ export default function TicketDetailsPage() {
       <section className="page-section">
         <div className="container simple-message">
           <h1>مسابقه پیدا نشد</h1>
-          <p>{reservationMessage || 'شناسه مسابقه در سرویس Event پیدا نشد.'}</p>
           <Link className="primary-button" to="/tickets">
             بازگشت به مسابقات
           </Link>
@@ -177,6 +176,16 @@ export default function TicketDetailsPage() {
       navigate(`/checkout/${ticket.id}`);
     } catch (error) {
       setReservationMessage(error.message);
+
+      if ([400, 409].includes(error.status)) {
+        try {
+          const refreshedTicket = await ticketService.getById(ticket.id);
+          setTicket(refreshedTicket);
+          setSelectedSeatIds([]);
+        } catch {
+          setSelectedSeatIds([]);
+        }
+      }
     } finally {
       setReserving(false);
     }
@@ -362,8 +371,8 @@ export default function TicketDetailsPage() {
           >
             <Ticket size={18} />
             {reserving
-              ? 'در حال ثبت انتخاب...'
-              : 'ادامه با صندلی‌های انتخابی'}
+              ? 'در حال ثبت رزرو...'
+              : 'رزرو صندلی‌های انتخابی'}
           </button>
           {reservationMessage && (
             <div className="form-message info booking-message" role="status">

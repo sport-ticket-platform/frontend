@@ -38,6 +38,7 @@ export default function CheckoutPage() {
           || new Date(currentReservation.expiresAt).getTime() <= Date.now();
 
         if (invalidReservation) {
+          storage.remove('activeReservation');
           throw new Error(
             'رزرو فعالی برای این مسابقه وجود ندارد. ابتدا صندلی را انتخاب کنید.',
           );
@@ -141,11 +142,10 @@ export default function CheckoutPage() {
           <CheckCircle2 size={48} />
           <h1>پرداخت آزمایشی با موفقیت انجام شد</h1>
           <p>
-            بلیط مسابقه{' '}
+            پرداخت فقط در مرورگر برای مسابقه{' '}
             <strong>
               {ticket.homeTeam} - {ticket.awayTeam}
             </strong>{' '}
-            در تاریخچه محلی ثبت شد.
           </p>
           <div className="tracking-code">
             <span>کد پیگیری</span>
@@ -182,7 +182,7 @@ export default function CheckoutPage() {
             </div>
             <div className={`reservation-countdown${countdown.seconds < 120 ? ' warning' : ''}`}>
               <Clock3 size={19} />
-              <span>زمان باقی‌مانده انتخاب</span>
+              <span>زمان باقی‌مانده رزرو</span>
               <strong>{countdown.formatted}</strong>
             </div>
           </div>
@@ -268,6 +268,18 @@ export default function CheckoutPage() {
           <p>{ticket.venue}</p>
 
           <div className="checkout-summary-lines">
+            <div>
+              <span>شناسه سفارش</span>
+              <strong>{reservation.orderId ?? reservation.id}</strong>
+            </div>
+            <div>
+              <span>نوع رزرو</span>
+              <strong>
+                {reservation.reservationSource === 'backend'
+                  ? 'ثبت‌شده در Reservation API'
+                  : 'رزرو آزمایشی'}
+              </strong>
+            </div>
             <div>
               <span>رده بلیط</span>
               <strong>{reservation.category || ticket.category}</strong>
