@@ -10,8 +10,20 @@ import { storage } from '../services/storage.js';
 
 const AuthContext = createContext(null);
 
+function readStoredUser() {
+  const user = storage.get('user');
+  const accessToken = storage.get('accessToken');
+
+  if (!user || !accessToken) {
+    storage.clearSession();
+    return null;
+  }
+
+  return user;
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => storage.get('user'));
+  const [user, setUser] = useState(readStoredUser);
 
   const syncSession = useCallback((session) => {
     if (session?.user) {
@@ -27,14 +39,28 @@ export function AuthProvider({ children }) {
     return session;
   }, [syncSession]);
 
+  const requestOtp = useCallback((identifier) => (
+    authService.requestOtp(identifier)
+  ), []);
+
   const verifyOtp = useCallback(async (identifier, mfa, otp) => {
     const session = await authService.verifyOtp(identifier, mfa, otp);
-    return syncSession(session);
+    if (!session.requiresOtp) syncSession(session);
+    return session;
   }, [syncSession]);
+
+  const signupInitiate = useCallback((email) => (
+    authService.signupInitiate(email)
+  ), []);
+
+  const signupVerify = useCallback((token, otp) => (
+    authService.signupVerify(token, otp)
+  ), []);
 
   const completeSignup = useCallback(async (values) => {
     const session = await authService.signupComplete(values);
-    return syncSession(session);
+    if (!session.requiresOtp) syncSession(session);
+    return session;
   }, [syncSession]);
 
   const updateUser = useCallback((updatedUser) => {
@@ -53,14 +79,24 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(user && storage.get('accessToken')),
     isSupport: ['SUPPORT', 'ADMIN'].includes(String(user?.role || '').toUpperCase()),
     loginWithPassword,
-    requestOtp: authService.requestOtp,
+    requestOtp,
     verifyOtp,
-    signupInitiate: authService.signupInitiate,
-    signupVerify: authService.signupVerify,
+    signupInitiate,
+    signupVerify,
     completeSignup,
     updateUser,
     logout,
-  }), [user, loginWithPassword, verifyOtp, completeSignup, updateUser, logout]);
+  }), [
+    user,
+    loginWithPassword,
+    requestOtp,
+    verifyOtp,
+    signupInitiate,
+    signupVerify,
+    completeSignup,
+    updateUser,
+    logout,
+  ]);
 
   return (
     <AuthContext.Provider value={value}>

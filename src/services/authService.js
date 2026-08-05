@@ -6,7 +6,7 @@ const wait = (milliseconds = 350) => new Promise((resolve) => {
   setTimeout(resolve, milliseconds);
 });
 
-const unwrap = (payload) => payload?.data || payload;
+const unwrap = (payload) => payload?.data ?? payload;
 
 function buildMockUser(identifier, role = 'USER') {
   return {
@@ -38,7 +38,10 @@ function establishMockSession(identifier, role = 'USER', profile = {}) {
 
 function decodeJwtPayload(token) {
   try {
-    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const encodedPayload = token.split('.')[1];
+    if (!encodedPayload) return {};
+
+    const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
     const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
     return JSON.parse(atob(padded));
   } catch {
@@ -46,46 +49,84 @@ function decodeJwtPayload(token) {
   }
 }
 
-async function finishBackendLogin(payload, identifier = '') {
-  const data = unwrap(payload);
+function normalizeRole(claims) {
+  const roles = Array.isArray(claims.roles)
+    ? claims.roles
+    : [claims.roles || claims.role].filter(Boolean);
 
-  if (data?.access_token) storage.set('accessToken', data.access_token);
-  if (data?.refresh_token) storage.set('refreshToken', data.refresh_token);
+  return String(roles[0] || 'USER')
+    .replace(/^ROLE_/, '')
+    .toUpperCase();
+}
 
-  if (!storage.get('accessToken') && data?.refresh_token) {
-    const refreshPayload = await apiRequest(`${apiConfig.authBaseUrl}/refresh`, {
-      method: 'POST',
-      body: JSON.stringify({ refresh_token: data.refresh_token }),
-    });
-    const refreshData = unwrap(refreshPayload);
-    storage.set('accessToken', refreshData.access_token);
-    storage.set('refreshToken', refreshData.refresh_token || data.refresh_token);
-  }
-
-  const accessToken = storage.get('accessToken');
-  if (!accessToken) throw new Error('توکن ورود از سرور دریافت نشد.');
-
+function buildUserFromToken(accessToken, identifier = '') {
   const claims = decodeJwtPayload(accessToken);
-  const rawRole = Array.isArray(claims.roles) ? claims.roles[0] : claims.role;
-  const role = String(rawRole || 'USER').replace(/^ROLE_/, '');
 
-  const user = {
-    userId: claims.sub || '',
-    firstName: claims.first_name || claims.name || 'کاربر',
-    lastName: claims.last_name || '',
+  return {
+    userId: String(claims.sub || ''),
+    firstName: 'کاربر',
+    lastName: '',
     email: identifier.includes('@') ? identifier : '',
     phoneNumber: identifier.includes('@') ? '' : identifier,
-    role,
+    role: normalizeRole(claims),
   };
+}
 
+async function exchangeRefreshToken(refreshToken) {
+  const payload = await apiRequest(`${apiConfig.authBaseUrl}/refresh`, {
+    method: 'POST',
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  }, false);
+
+  const data = unwrap(payload);
+  if (!data?.access_token) {
+    throw new Error('توکن دسترسی از سرور دریافت نشد.');
+  }
+
+  storage.set('accessToken', data.access_token);
+  storage.set('refreshToken', data.refresh_token || refreshToken);
+
+  return data;
+}
+
+async function finishBackendLogin(payload, identifier = '') {
+  const data = unwrap(payload) || {};
+
+  storage.remove('accessToken');
+  storage.remove('user');
   storage.remove('mockSession');
+
+  let accessToken = data.access_token || '';
+  let refreshToken = data.refresh_token || '';
+
+  if (refreshToken) storage.set('refreshToken', refreshToken);
+
+  if (!accessToken && refreshToken) {
+    const refreshed = await exchangeRefreshToken(refreshToken);
+    accessToken = refreshed.access_token;
+    refreshToken = refreshed.refresh_token || refreshToken;
+  } else if (accessToken) {
+    storage.set('accessToken', accessToken);
+  }
+
+  if (!accessToken) {
+    storage.remove('refreshToken');
+    throw new Error('اطلاعات نشست از سرور دریافت نشد.');
+  }
+
+  const user = buildUserFromToken(accessToken, identifier);
   storage.set('user', user);
 
   return {
     user,
     access_token: accessToken,
-    refresh_token: storage.get('refreshToken'),
+    refresh_token: refreshToken || storage.get('refreshToken'),
   };
+}
+
+function requireToken(value, message) {
+  if (!value) throw new Error(message);
+  return value;
 }
 
 export const authService = {
@@ -99,14 +140,20 @@ export const authService = {
       return establishMockSession(identifier, role);
     }
 
+    storage.clearSession();
+
     const payload = await apiRequest(`${apiConfig.authBaseUrl}/login-password`, {
       method: 'POST',
       body: JSON.stringify({ identifier, password }),
     });
-    const data = unwrap(payload);
+    const data = unwrap(payload) || {};
 
-    if (data?.step && data.step !== 'DONE' && data.mfa_token) {
-      return { requiresOtp: true, mfa: data.mfa_token };
+    if (data.mfa_token && String(data.step || '').startsWith('2FA')) {
+      return {
+        requiresOtp: true,
+        mfa: data.mfa_token,
+        step: data.step,
+      };
     }
 
     return finishBackendLogin(payload, identifier);
@@ -118,16 +165,25 @@ export const authService = {
       return { mfa: `mock-mfa-${Date.now()}`, demoOtp: '12345' };
     }
 
+    storage.clearSession();
+
     const isEmail = identifier.includes('@');
     const endpoint = isEmail ? 'login-otp-email' : 'login-otp-phone';
     const body = isEmail ? { email: identifier } : { phone: identifier };
+
     const payload = await apiRequest(`${apiConfig.authBaseUrl}/${endpoint}`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
-    const data = unwrap(payload);
+    const data = unwrap(payload) || {};
 
-    return { mfa: data.mfa_token || data.mfa, ...data };
+    return {
+      ...data,
+      mfa: requireToken(
+        data.mfa_token || data.mfa,
+        'توکن تأیید کد یک‌بارمصرف از سرور دریافت نشد.',
+      ),
+    };
   },
 
   async verifyOtp(identifier, mfa, otp) {
@@ -144,6 +200,15 @@ export const authService = {
       method: 'POST',
       body: JSON.stringify({ mfa, otp }),
     });
+    const data = unwrap(payload) || {};
+
+    if (data.mfa_token && String(data.step || '').startsWith('2FA')) {
+      return {
+        requiresOtp: true,
+        mfa: data.mfa_token,
+        step: data.step,
+      };
+    }
 
     return finishBackendLogin(payload, identifier);
   },
@@ -158,8 +223,15 @@ export const authService = {
       method: 'POST',
       body: JSON.stringify({ email }),
     });
+    const data = unwrap(payload) || {};
 
-    return unwrap(payload);
+    return {
+      ...data,
+      mfa_token: requireToken(
+        data.mfa_token,
+        'توکن تأیید ثبت‌نام از سرور دریافت نشد.',
+      ),
+    };
   },
 
   async signupVerify(token, otp) {
@@ -175,8 +247,15 @@ export const authService = {
       method: 'POST',
       body: JSON.stringify({ mfa: token, otp }),
     });
+    const data = unwrap(payload) || {};
 
-    return unwrap(payload);
+    return {
+      ...data,
+      temp_token: requireToken(
+        data.temp_token,
+        'توکن موقت تکمیل ثبت‌نام از سرور دریافت نشد.',
+      ),
+    };
   },
 
   async signupComplete({ tempToken, firstName, lastName, password, email }) {
@@ -199,6 +278,16 @@ export const authService = {
       method: 'POST',
       body: JSON.stringify({ identifier: email, password }),
     });
+    const loginData = unwrap(loginPayload) || {};
+
+    if (loginData.mfa_token && String(loginData.step || '').startsWith('2FA')) {
+      return {
+        requiresOtp: true,
+        mfa: loginData.mfa_token,
+        step: loginData.step,
+        identifier: email,
+      };
+    }
 
     return finishBackendLogin(loginPayload, email);
   },
@@ -211,10 +300,11 @@ export const authService = {
         await apiRequest(`${apiConfig.authBaseUrl}/logout`, {
           method: 'POST',
           body: JSON.stringify({ refresh_token: refreshToken }),
-        });
+        }, false);
       } catch {
       }
     }
+
     storage.clearSession();
   },
 };

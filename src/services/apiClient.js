@@ -15,17 +15,60 @@ function getDeviceId() {
   return deviceId;
 }
 
-async function parseResponse(response) {
+function collectMessageValues(value) {
+  if (value == null) return [];
+  if (typeof value === 'string') return value.trim() ? [value.trim()] : [];
+  if (Array.isArray(value)) return value.flatMap(collectMessageValues);
+
+  if (typeof value === 'object') {
+    const directMessage = value.messageFa || value.message || value.titleFa || value.title;
+    if (directMessage) return collectMessageValues(directMessage);
+    return Object.values(value).flatMap(collectMessageValues);
+  }
+
+  return [];
+}
+
+function collectValidationMessage(body) {
+  if (!body || typeof body !== 'object') return '';
+
+  const source = body.errors
+    || body.validationErrors
+    || body.error?.errors
+    || body.data;
+
+  return [...new Set(collectMessageValues(source))].join('، ');
+}
+
+async function readResponseBody(response) {
+  if (response.status === 204) return null;
+
+  const rawBody = await response.text();
+  if (!rawBody) return null;
+
   const contentType = response.headers.get('content-type') || '';
-  const body = contentType.includes('application/json')
-    ? await response.json()
-    : await response.text();
+  if (!contentType.includes('application/json')) return rawBody;
+
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    return rawBody;
+  }
+}
+
+async function parseResponse(response) {
+  const body = await readResponseBody(response);
 
   if (!response.ok) {
-    const message = body?.message
+    const message = body?.messageFa
+      || body?.titleFa
+      || collectValidationMessage(body)
+      || body?.message
+      || body?.title
       || body?.error
       || (typeof body === 'string' && body)
       || 'خطا در ارتباط با سرور';
+
     const error = new Error(message);
     error.status = response.status;
     error.payload = body;
@@ -42,6 +85,7 @@ async function refreshAccessToken() {
   const response = await fetch(`${apiConfig.authBaseUrl}/refresh`, {
     method: 'POST',
     headers: {
+      Accept: 'application/json',
       'Content-Type': 'application/json',
       'X-Device-Id': getDeviceId(),
     },

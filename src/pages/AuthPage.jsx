@@ -54,6 +54,12 @@ export default function AuthPage() {
     navigate(destination, { replace: true });
   };
 
+  const getOtpMessage = (step) => (
+    step === '2FA-PHONE'
+      ? 'کد تأیید دومرحله‌ای به شماره تلفن شما ارسال شد.'
+      : 'کد تأیید دومرحله‌ای به ایمیل شما ارسال شد.'
+  );
+
   const submitPassword = async (event) => {
     event.preventDefault();
     setLoading(true);
@@ -64,7 +70,7 @@ export default function AuthPage() {
       if (result.requiresOtp) {
         setMode('otp');
         setMfa(result.mfa);
-        setMessage({ type: 'info', text: 'کد تأیید دومرحله‌ای را وارد کنید.' });
+        setMessage({ type: 'info', text: getOtpMessage(result.step) });
       } else {
         finishLogin();
       }
@@ -100,7 +106,15 @@ export default function AuthPage() {
     setMessage(null);
 
     try {
-      await verifyOtp(identifier.trim(), mfa, otp);
+      const result = await verifyOtp(identifier.trim(), mfa, otp);
+
+      if (result.requiresOtp) {
+        setMfa(result.mfa);
+        setOtp('');
+        setMessage({ type: 'info', text: getOtpMessage(result.step) });
+        return;
+      }
+
       finishLogin();
     } catch (error) {
       showError(error);
@@ -152,7 +166,17 @@ export default function AuthPage() {
     setMessage(null);
 
     try {
-      await completeSignup({ tempToken, ...signup });
+      const result = await completeSignup({ tempToken, ...signup });
+
+      if (result.requiresOtp) {
+        setIdentifier(signup.email.trim());
+        setMode('otp');
+        setMfa(result.mfa);
+        setOtp('');
+        setMessage({ type: 'info', text: getOtpMessage(result.step) });
+        return;
+      }
+
       finishLogin();
     } catch (error) {
       showError(error);
@@ -206,7 +230,7 @@ export default function AuthPage() {
           )}
 
           {mode === 'password' && (
-            <form className="auth-form" onSubmit={submitPassword}>
+            <form className="auth-form" onSubmit={submitPassword} aria-busy={loading}>
               <label>
                 ایمیل یا شماره تلفن
                 <input
@@ -221,11 +245,12 @@ export default function AuthPage() {
                 رمز عبور
                 <input
                   required
-                  minLength={8}
+                  minLength={1}
+                  maxLength={32}
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="حداقل ۸ کاراکتر"
+                  placeholder="رمز عبور حساب"
                   autoComplete="current-password"
                 />
               </label>
@@ -237,7 +262,7 @@ export default function AuthPage() {
           )}
 
           {mode === 'otp' && !mfa && (
-            <form className="auth-form" onSubmit={requestLoginCode}>
+            <form className="auth-form" onSubmit={requestLoginCode} aria-busy={loading}>
               <label>
                 ایمیل یا شماره تلفن
                 <input
@@ -254,7 +279,7 @@ export default function AuthPage() {
           )}
 
           {mode === 'otp' && mfa && (
-            <form className="auth-form" onSubmit={verifyLoginCode}>
+            <form className="auth-form" onSubmit={verifyLoginCode} aria-busy={loading}>
               <label>
                 کد تأیید
                 <input
@@ -264,7 +289,7 @@ export default function AuthPage() {
                   maxLength={6}
                   value={otp}
                   onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
-                  placeholder="12345"
+                  placeholder="کد ۶ رقمی"
                 />
               </label>
               <button className="auth-submit" type="submit" disabled={loading}>
@@ -285,7 +310,7 @@ export default function AuthPage() {
           )}
 
           {mode === 'signup' && signupStep === 1 && (
-            <form className="auth-form" onSubmit={startSignup}>
+            <form className="auth-form" onSubmit={startSignup} aria-busy={loading}>
               <label>
                 ایمیل
                 <input
@@ -294,6 +319,7 @@ export default function AuthPage() {
                   value={signup.email}
                   onChange={(event) => setSignup({ ...signup, email: event.target.value })}
                   placeholder="example@mail.com"
+                  autoComplete="email"
                 />
               </label>
               <button className="auth-submit" type="submit" disabled={loading}>
@@ -303,7 +329,7 @@ export default function AuthPage() {
           )}
 
           {mode === 'signup' && signupStep === 2 && (
-            <form className="auth-form" onSubmit={verifySignupCode}>
+            <form className="auth-form" onSubmit={verifySignupCode} aria-busy={loading}>
               <label>
                 کد تأیید ایمیل
                 <input
@@ -313,7 +339,7 @@ export default function AuthPage() {
                   maxLength={6}
                   value={otp}
                   onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
-                  placeholder="12345"
+                  placeholder="کد ۶ رقمی"
                 />
               </label>
               <button className="auth-submit" type="submit" disabled={loading}>
@@ -323,12 +349,15 @@ export default function AuthPage() {
           )}
 
           {mode === 'signup' && signupStep === 3 && (
-            <form className="auth-form" onSubmit={finishSignup}>
+            <form className="auth-form" onSubmit={finishSignup} aria-busy={loading}>
               <div className="auth-two-fields">
                 <label>
                   نام
                   <input
                     required
+                    minLength={2}
+                    maxLength={50}
+                    autoComplete="given-name"
                     value={signup.firstName}
                     onChange={(event) => setSignup({ ...signup, firstName: event.target.value })}
                   />
@@ -337,6 +366,9 @@ export default function AuthPage() {
                   نام خانوادگی
                   <input
                     required
+                    minLength={2}
+                    maxLength={50}
+                    autoComplete="family-name"
                     value={signup.lastName}
                     onChange={(event) => setSignup({ ...signup, lastName: event.target.value })}
                   />
@@ -347,10 +379,14 @@ export default function AuthPage() {
                 <input
                   required
                   minLength={8}
+                  maxLength={32}
+                  pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,32}"
                   type="password"
                   value={signup.password}
                   onChange={(event) => setSignup({ ...signup, password: event.target.value })}
-                  placeholder="حداقل ۸ کاراکتر"
+                  placeholder="۸ تا ۳۲ کاراکتر؛ شامل حرف بزرگ، کوچک و عدد"
+                  title="رمز باید حداقل یک حرف انگلیسی بزرگ، یک حرف کوچک و یک عدد داشته باشد."
+                  autoComplete="new-password"
                 />
               </label>
               <button className="auth-submit" type="submit" disabled={loading}>

@@ -17,6 +17,16 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/user-api/, ''),
       },
+      '/event-api': {
+        target: 'http://localhost:5234',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/event-api/, ''),
+      },
+      '/reservation-api': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/reservation-api/, ''),
+      },
       '/ticket-api': {
         target: 'http://localhost:8090',
         changeOrigin: true,
