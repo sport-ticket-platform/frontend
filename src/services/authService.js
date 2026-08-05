@@ -72,6 +72,24 @@ function buildUserFromToken(accessToken, identifier = '') {
   };
 }
 
+async function fetchBackendProfile(fallbackUser) {
+  if (apiConfig.userMocks) return fallbackUser;
+
+  try {
+    const payload = await apiRequest(`${apiConfig.userBaseUrl}/profile`);
+    const profile = unwrap(payload) || {};
+
+    return {
+      ...fallbackUser,
+      ...profile,
+      userId: fallbackUser.userId,
+      role: fallbackUser.role,
+    };
+  } catch {
+    return fallbackUser;
+  }
+}
+
 async function exchangeRefreshToken(refreshToken) {
   const payload = await apiRequest(`${apiConfig.authBaseUrl}/refresh`, {
     method: 'POST',
@@ -114,7 +132,8 @@ async function finishBackendLogin(payload, identifier = '') {
     throw new Error('اطلاعات نشست از سرور دریافت نشد.');
   }
 
-  const user = buildUserFromToken(accessToken, identifier);
+  const tokenUser = buildUserFromToken(accessToken, identifier);
+  const user = await fetchBackendProfile(tokenUser);
   storage.set('user', user);
 
   return {

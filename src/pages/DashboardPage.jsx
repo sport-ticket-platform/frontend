@@ -282,6 +282,8 @@ export default function DashboardPage() {
                     نام
                     <input
                       required
+                      minLength={3}
+                      maxLength={60}
                       value={profile.firstName || ''}
                       onChange={(event) => setProfile({ ...profile, firstName: event.target.value })}
                     />
@@ -290,6 +292,8 @@ export default function DashboardPage() {
                     نام خانوادگی
                     <input
                       required
+                      minLength={3}
+                      maxLength={60}
                       value={profile.lastName || ''}
                       onChange={(event) => setProfile({ ...profile, lastName: event.target.value })}
                     />
@@ -299,6 +303,7 @@ export default function DashboardPage() {
                   <label>
                     ایمیل
                     <input
+                      required
                       type="email"
                       value={profile.email || ''}
                       onChange={(event) => setProfile({ ...profile, email: event.target.value })}
@@ -307,6 +312,9 @@ export default function DashboardPage() {
                   <label>
                     شماره تماس
                     <input
+                      inputMode="numeric"
+                      maxLength={11}
+                      pattern="09[0-9]{9}"
                       value={profile.phoneNumber || ''}
                       onChange={(event) => setProfile({ ...profile, phoneNumber: event.target.value })}
                     />
