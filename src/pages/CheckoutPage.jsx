@@ -10,7 +10,7 @@ import { useCountdown } from '../hooks/useCountdown.js';
 import { ticketService } from '../services/ticketService.js';
 import { storage } from '../services/storage.js';
 
-const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value);
+const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value || 0);
 
 export default function CheckoutPage() {
   const { ticketId } = useParams();
@@ -32,16 +32,22 @@ export default function CheckoutPage() {
       setMessage(null);
 
       try {
-        const selectedTicket = await ticketService.getById(ticketId);
-        if (!selectedTicket) throw new Error('بلیط انتخاب‌شده پیدا نشد.');
-
-        let currentReservation = storage.get('activeReservation');
+        const currentReservation = storage.get('activeReservation');
         const invalidReservation = !currentReservation
-          || currentReservation.ticketId !== ticketId
+          || String(currentReservation.ticketId) !== String(ticketId)
           || new Date(currentReservation.expiresAt).getTime() <= Date.now();
 
         if (invalidReservation) {
-          currentReservation = await ticketService.reserve(ticketId, 1);
+          throw new Error(
+            'رزرو فعالی برای این مسابقه وجود ندارد. ابتدا صندلی را انتخاب کنید.',
+          );
+        }
+
+        const selectedTicket = currentReservation.ticket
+          || await ticketService.getById(ticketId);
+
+        if (!selectedTicket) {
+          throw new Error('اطلاعات مسابقه پیدا نشد.');
         }
 
         if (active) {
@@ -49,22 +55,35 @@ export default function CheckoutPage() {
           setReservation(currentReservation);
         }
       } catch (error) {
-        if (active) setMessage({ type: 'error', text: error.message });
+        if (active) {
+          setMessage({
+            type: 'error',
+            text: error.message,
+          });
+        }
       } finally {
         if (active) setLoading(false);
       }
     };
 
     prepareCheckout();
+
     return () => {
       active = false;
     };
   }, [ticketId]);
 
-  const quantity = reservation?.quantity || 1;
+  const quantity = reservation?.quantity
+    || reservation?.seatIds?.length
+    || 1;
+  const unitPrice = Number(
+    reservation?.unitPrice
+    || ticket?.price
+    || 0,
+  );
   const totalPrice = useMemo(
-    () => (ticket?.price || 0) * quantity,
-    [ticket, quantity],
+    () => Number(reservation?.amount || unitPrice * quantity),
+    [reservation, unitPrice, quantity],
   );
 
   const submitPayment = async () => {
@@ -73,7 +92,7 @@ export default function CheckoutPage() {
     if (countdown.expired) {
       setMessage({
         type: 'error',
-        text: 'زمان رزرو تمام شده است. دوباره بلیط را رزرو کنید.',
+        text: 'زمان رزرو تمام شده است. دوباره صندلی‌ها را انتخاب کنید.',
       });
       return;
     }
@@ -82,16 +101,24 @@ export default function CheckoutPage() {
     setMessage(null);
 
     try {
-      const result = await ticketService.pay(reservation.id, paymentMethod);
+      const result = await ticketService.pay(
+        reservation.id,
+        paymentMethod,
+      );
       setPaymentResult(result);
     } catch (error) {
-      setMessage({ type: 'error', text: error.message });
+      setMessage({
+        type: 'error',
+        text: error.message,
+      });
     } finally {
       setPaying(false);
     }
   };
 
-  if (loading) return <Loading label="در حال آماده‌سازی صفحه پرداخت..." />;
+  if (loading) {
+    return <Loading label="در حال آماده‌سازی صفحه پرداخت..." />;
+  }
 
   if (!ticket || !reservation) {
     return (
@@ -99,8 +126,8 @@ export default function CheckoutPage() {
         <div className="container simple-message">
           <h1>امکان ادامه پرداخت وجود ندارد</h1>
           <p>{message?.text || 'اطلاعات رزرو در دسترس نیست.'}</p>
-          <Link className="primary-button" to="/tickets">
-            بازگشت به مسابقات
+          <Link className="primary-button" to={`/tickets/${ticketId}`}>
+            بازگشت و انتخاب صندلی
           </Link>
         </div>
       </section>
@@ -112,9 +139,13 @@ export default function CheckoutPage() {
       <section className="payment-success-section">
         <div className="container payment-success-card">
           <CheckCircle2 size={48} />
-          <h1>پرداخت با موفقیت انجام شد</h1>
+          <h1>پرداخت آزمایشی با موفقیت انجام شد</h1>
           <p>
-            بلیط مسابقه <strong>{ticket.homeTeam} - {ticket.awayTeam}</strong> با موفقیت ثبت شد.
+            بلیط مسابقه{' '}
+            <strong>
+              {ticket.homeTeam} - {ticket.awayTeam}
+            </strong>{' '}
+            در تاریخچه محلی ثبت شد.
           </p>
           <div className="tracking-code">
             <span>کد پیگیری</span>
@@ -151,11 +182,10 @@ export default function CheckoutPage() {
             </div>
             <div className={`reservation-countdown${countdown.seconds < 120 ? ' warning' : ''}`}>
               <Clock3 size={19} />
-              <span>زمان باقی‌مانده</span>
+              <span>زمان باقی‌مانده انتخاب</span>
               <strong>{countdown.formatted}</strong>
             </div>
           </div>
-
           <div className="payment-method-list">
             <label className={paymentMethod === 'bank_card' ? 'selected' : ''}>
               <input
@@ -213,10 +243,10 @@ export default function CheckoutPage() {
             disabled={paying || countdown.expired}
           >
             {countdown.expired
-              ? 'زمان رزرو پایان یافته است'
+              ? 'زمان انتخاب پایان یافته است'
               : paying
                 ? 'در حال ثبت پرداخت...'
-                : `پرداخت ${formatNumber(totalPrice)} تومان`}
+                : `پرداخت آزمایشی ${formatNumber(totalPrice)} تومان`}
           </button>
 
           {countdown.expired && (
@@ -225,7 +255,7 @@ export default function CheckoutPage() {
               type="button"
               onClick={() => navigate(`/tickets/${ticket.id}`)}
             >
-              رزرو دوباره بلیط
+              انتخاب دوباره صندلی
             </button>
           )}
         </div>
@@ -239,8 +269,18 @@ export default function CheckoutPage() {
 
           <div className="checkout-summary-lines">
             <div>
-              <span>رده و جایگاه</span>
-              <strong>{ticket.category}، {ticket.section}</strong>
+              <span>رده بلیط</span>
+              <strong>{reservation.category || ticket.category}</strong>
+            </div>
+            <div>
+              <span>صندلی‌ها</span>
+              <strong>
+                {reservation.selectedSeats?.length
+                  ? reservation.selectedSeats
+                    .map((seat) => `ردیف ${seat.row}، ${seat.number}`)
+                    .join(' | ')
+                  : reservation.seatIds?.join('، ') || 'ثبت نشده'}
+              </strong>
             </div>
             <div>
               <span>تعداد بلیط</span>
@@ -248,7 +288,7 @@ export default function CheckoutPage() {
             </div>
             <div>
               <span>قیمت هر بلیط</span>
-              <strong>{formatNumber(ticket.price)} تومان</strong>
+              <strong>{formatNumber(unitPrice)} تومان</strong>
             </div>
             <div className="checkout-summary-total">
               <span>مبلغ نهایی</span>

@@ -1,14 +1,35 @@
 import { apiRequest } from './apiClient.js';
 import { apiConfig } from './apiConfig.js';
-import { cities as mockCities, sports as mockSports, tickets as mockTickets } from '../data/mockData.js';
+import {
+  cities as mockCities,
+  sports as mockSports,
+  tickets as mockTickets,
+} from '../data/mockData.js';
 
 const unwrap = (payload) => payload?.data ?? payload;
 
 const sportDefinitions = [
-  { value: 'football', label: 'فوتبال', aliases: ['football', 'فوتبال'], emoji: '⚽' },
-  { value: 'volleyball', label: 'والیبال', aliases: ['volleyball', 'والیبال'], emoji: '🏐' },
-  { value: 'basketball', label: 'بسکتبال', aliases: ['basketball', 'بسکتبال'], emoji: '🏀' },
+  {
+    value: 'football',
+    label: 'فوتبال',
+    aliases: ['football', 'فوتبال'],
+    emoji: '⚽',
+  },
+  {
+    value: 'volleyball',
+    label: 'والیبال',
+    aliases: ['volleyball', 'والیبال'],
+    emoji: '🏐',
+  },
+  {
+    value: 'basketball',
+    label: 'بسکتبال',
+    aliases: ['basketball', 'بسکتبال'],
+    emoji: '🏀',
+  },
 ];
+
+let matchCache = [];
 
 function teamCode(name = '') {
   const words = String(name).trim().split(/\s+/).filter(Boolean);
@@ -31,6 +52,34 @@ function normalizeSport(name = '') {
     label: name || 'ورزش',
     emoji: '🎟️',
   };
+}
+
+function selectedSportName(value) {
+  return sportDefinitions.find((item) => item.value === value)?.label || null;
+}
+
+function parseAmenities(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+
+  try {
+    const parsed = JSON.parse(value);
+
+    if (Array.isArray(parsed)) return parsed.filter(Boolean);
+
+    if (parsed && typeof parsed === 'object') {
+      return Object.entries(parsed)
+        .filter(([, enabled]) => Boolean(enabled))
+        .map(([name]) => name);
+    }
+  } catch {
+    return String(value)
+      .split(/[,،|]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
 }
 
 function formatDateTime(value) {
@@ -59,20 +108,47 @@ function formatDateTime(value) {
   };
 }
 
-function normalizeMatch(match, configs = []) {
-  const normalizedConfigs = configs
-    .map((config) => ({
-      configId: Number(config.configId),
-      category: config.categoryName || 'عادی',
-      price: Number(config.price || 0),
-      totalSeats: Number(config.totalSeats || 0),
-    }))
-    .sort((first, second) => first.price - second.price);
+function normalizeConfig(config, seats = []) {
+  const configSeats = seats.filter(
+    (seat) => Number(seat.configId) === Number(config.configId),
+  );
+  const availableSeats = configSeats.filter((seat) => !seat.isReserved);
 
-  const cheapestConfig = normalizedConfigs[0];
+  return {
+    id: String(config.configId),
+    configId: Number(config.configId),
+    matchId: Number(config.matchId),
+    categoryId: Number(config.categoryId),
+    category: config.categoryName || 'عادی',
+    price: Number(config.price || 0),
+    totalSeats: Number(config.totalSeats || configSeats.length || 0),
+    remaining: configSeats.length
+      ? availableSeats.length
+      : Number(config.totalSeats || 0),
+    amenities: parseAmenities(config.amenities),
+    seats: configSeats.map((seat) => ({
+      id: String(seat.seatId),
+      seatId: Number(seat.seatId),
+      configId: Number(seat.configId),
+      section: Number(seat.section),
+      row: Number(seat.rowNo),
+      number: Number(seat.seatNo),
+      isReserved: Boolean(seat.isReserved),
+    })),
+  };
+}
+
+function normalizeMatch(match, rawConfigs = [], seats = []) {
+  const configs = rawConfigs
+    .map((config) => normalizeConfig(config, seats))
+    .sort((first, second) => first.price - second.price);
+  const cheapestConfig = configs[0];
   const dateParts = formatDateTime(match.matchTime);
   const sport = normalizeSport(match.sportName);
-  const totalSeats = normalizedConfigs.reduce((sum, config) => sum + config.totalSeats, 0);
+  const remaining = configs.reduce(
+    (sum, config) => sum + config.remaining,
+    0,
+  );
 
   return {
     id: String(match.matchId),
@@ -93,8 +169,15 @@ function normalizeMatch(match, configs = []) {
     ...dateParts,
     category: cheapestConfig?.category || 'در حال تکمیل',
     price: cheapestConfig?.price || 0,
-    remaining: totalSeats,
-    availabilityLabel: 'ظرفیت تعریف‌شده',
+    remaining,
+    section: cheapestConfig
+      ? `رده ${cheapestConfig.category}`
+      : 'ثبت نشده',
+    row: 'با انتخاب صندلی مشخص می‌شود',
+    seat: 'با انتخاب صندلی مشخص می‌شود',
+    amenities: cheapestConfig?.amenities || [],
+    description: `بلیط مسابقه ${match.hostTeamName || 'تیم میزبان'} و ${match.guestTeamName || 'تیم مهمان'} در ${match.venueName || 'ورزشگاه'}.`,
+    configs,
   };
 }
 
@@ -110,7 +193,7 @@ function buildDateRange(dateValue) {
   };
 }
 
-function filterMatches(matches, filters = {}) {
+function filterNormalizedMatches(matches, filters = {}) {
   const query = String(filters.q || '').trim().toLowerCase();
   const minPrice = filters.minPrice === '' || filters.minPrice == null
     ? null
@@ -136,16 +219,31 @@ function filterMatches(matches, filters = {}) {
   });
 }
 
-async function getMatchConfigs(matchId) {
-  const payload = await apiRequest(`${apiConfig.eventBaseUrl}/match/${matchId}/configs`);
+async function getConfigs(matchId) {
+  const payload = await apiRequest(
+    `${apiConfig.eventBaseUrl}/match/${matchId}/configs`,
+  );
   const configs = unwrap(payload);
   return Array.isArray(configs) ? configs : [];
 }
 
-async function normalizeMatches(matches) {
+async function getSeats(configIds) {
+  if (!configIds.length) return [];
+
+  const params = new URLSearchParams();
+  configIds.forEach((id) => params.append('ConfigIds', String(id)));
+
+  const payload = await apiRequest(
+    `${apiConfig.eventBaseUrl}/match/configs/seats?${params.toString()}`,
+  );
+  const seats = unwrap(payload);
+  return Array.isArray(seats) ? seats : [];
+}
+
+async function enrichMatches(matches) {
   return Promise.all(matches.map(async (match) => {
     try {
-      const configs = await getMatchConfigs(match.matchId);
+      const configs = await getConfigs(match.matchId);
       return normalizeMatch(match, configs);
     } catch {
       return normalizeMatch(match);
@@ -153,14 +251,10 @@ async function normalizeMatches(matches) {
   }));
 }
 
-function selectedSportName(value) {
-  return sportDefinitions.find((item) => item.value === value)?.label || null;
-}
-
 export const eventService = {
   async searchMatches(filters = {}) {
     if (apiConfig.eventMocks) {
-      return filterMatches(mockTickets, filters);
+      return filterNormalizedMatches(mockTickets, filters);
     }
 
     const payload = await apiRequest(`${apiConfig.eventBaseUrl}/match`, {
@@ -174,9 +268,42 @@ export const eventService = {
       }),
     });
 
-    const matches = unwrap(payload);
-    const normalized = await normalizeMatches(Array.isArray(matches) ? matches : []);
-    return filterMatches(normalized, filters);
+    const matches = Array.isArray(unwrap(payload)) ? unwrap(payload) : [];
+    matchCache = matches;
+    const normalized = await enrichMatches(matches);
+    return filterNormalizedMatches(normalized, filters);
+  },
+
+  async getMatchDetails(matchId) {
+    if (apiConfig.eventMocks) {
+      return mockTickets.find(
+        (ticket) => String(ticket.id) === String(matchId),
+      ) || null;
+    }
+
+    let match = matchCache.find(
+      (item) => String(item.matchId) === String(matchId),
+    );
+
+    if (!match) {
+      const payload = await apiRequest(
+        `${apiConfig.eventBaseUrl}/match?limit=40&offset=0`,
+      );
+      const matches = Array.isArray(unwrap(payload)) ? unwrap(payload) : [];
+      matchCache = matches;
+      match = matches.find(
+        (item) => String(item.matchId) === String(matchId),
+      );
+    }
+
+    if (!match) return null;
+
+    const configs = await getConfigs(match.matchId);
+    const seats = await getSeats(
+      configs.map((config) => config.configId),
+    );
+
+    return normalizeMatch(match, configs, seats);
   },
 
   async getMetadata() {
@@ -192,19 +319,32 @@ export const eventService = {
       apiRequest(`${apiConfig.eventBaseUrl}/leagues?limit=40&offset=0`),
     ]);
 
-    const venuesPayload = venuesResult.status === 'fulfilled' ? unwrap(venuesResult.value) : [];
-    const leaguesPayload = leaguesResult.status === 'fulfilled' ? unwrap(leaguesResult.value) : [];
+    const venuesPayload = venuesResult.status === 'fulfilled'
+      ? unwrap(venuesResult.value)
+      : [];
+    const leaguesPayload = leaguesResult.status === 'fulfilled'
+      ? unwrap(leaguesResult.value)
+      : [];
     const venues = Array.isArray(venuesPayload) ? venuesPayload : [];
     const leagues = Array.isArray(leaguesPayload) ? leaguesPayload : [];
-    const cities = [...new Set(venues.map((venue) => venue.cityName).filter(Boolean))];
-    const sports = [...new Map(leagues.map((league) => {
-      const sport = normalizeSport(league.sportName);
-      return [sport.value, {
-        value: sport.value,
-        label: sport.label,
-        emoji: sport.emoji,
-      }];
-    })).values()];
+    const cities = [
+      ...new Set(
+        venues.map((venue) => venue.cityName).filter(Boolean),
+      ),
+    ];
+    const sports = [
+      ...new Map(leagues.map((league) => {
+        const sport = normalizeSport(league.sportName);
+        return [
+          sport.value,
+          {
+            value: sport.value,
+            label: sport.label,
+            emoji: sport.emoji,
+          },
+        ];
+      })).values(),
+    ];
 
     return {
       sports: sports.length ? sports : mockSports,

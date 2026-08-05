@@ -1,7 +1,8 @@
 import { apiRequest } from './apiClient.js';
 import { apiConfig } from './apiConfig.js';
 import { storage } from './storage.js';
-import { tickets } from '../data/mockData.js';
+import { eventService } from './eventService.js';
+import { tickets as mockTickets } from '../data/mockData.js';
 
 const delay = (milliseconds = 250) => new Promise((resolve) => {
   window.setTimeout(resolve, milliseconds);
@@ -10,7 +11,7 @@ const delay = (milliseconds = 250) => new Promise((resolve) => {
 const unwrap = (payload) => payload?.data || payload;
 
 function getMockTicket(ticketId) {
-  return tickets.find((ticket) => ticket.id === ticketId) || null;
+  return mockTickets.find((ticket) => String(ticket.id) === String(ticketId)) || null;
 }
 
 function normalizeDigits(value = '') {
@@ -91,101 +92,132 @@ function calculatePenalty(booking) {
   };
 }
 
+
+function normalizeSelection(ticket, selection) {
+  if (typeof selection === 'number') {
+    const config = ticket.configs?.[0];
+    const availableSeats = config?.seats?.filter((seat) => !seat.isReserved) || [];
+    const selectedSeats = availableSeats.slice(0, selection);
+
+    return {
+      config,
+      selectedSeats,
+      seatIds: selectedSeats.map((seat) => Number(seat.seatId)),
+      quantity: selectedSeats.length,
+    };
+  }
+
+  const selectedSeats = Array.isArray(selection?.selectedSeats)
+    ? selection.selectedSeats
+    : [];
+  const seatIds = Array.isArray(selection?.seatIds)
+    ? selection.seatIds
+    : selectedSeats.map((seat) => seat.seatId);
+
+  return {
+    config: selection?.config || ticket.configs?.[0],
+    selectedSeats,
+    seatIds: seatIds.map(Number).filter(Number.isFinite),
+    quantity: seatIds.length,
+  };
+}
+
+function createLocalReservation(ticket, selected) {
+  const unitPrice = Number(selected.config?.price || ticket.price || 0);
+
+  return {
+    id: `rs-${Date.now()}`,
+    ticketId: String(ticket.id),
+    matchId: Number(ticket.matchId || ticket.id),
+    configId: selected.config?.configId || null,
+    category: selected.config?.category || ticket.category,
+    seatIds: selected.seatIds,
+    selectedSeats: selected.selectedSeats,
+    quantity: selected.quantity,
+    unitPrice,
+    amount: unitPrice * selected.quantity,
+    status: 'reserved',
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    ticket,
+  };
+}
+
 export const ticketService = {
   async getById(ticketId) {
-    if (apiConfig.ticketMocks) {
-      await delay(180);
-      return getMockTicket(ticketId);
-    }
-
-    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/tickets/${ticketId}`);
-    return unwrap(payload);
+    return eventService.getMatchDetails(ticketId);
   },
 
-  async reserve(ticketId, quantity = 1) {
-    if (apiConfig.ticketMocks) {
-      await delay();
-      const ticket = getMockTicket(ticketId);
+  async reserve(ticketId, selection = 1) {
+    const ticket = await eventService.getMatchDetails(ticketId);
 
-      if (!ticket) throw new Error('بلیط انتخاب‌شده پیدا نشد.');
-      if (quantity < 1 || quantity > 4) throw new Error('تعداد بلیط معتبر نیست.');
-      if (quantity > ticket.remaining) throw new Error('ظرفیت کافی برای این تعداد بلیط وجود ندارد.');
-
-      const reservation = {
-        id: `rs-${Date.now()}`,
-        ticketId,
-        quantity,
-        status: 'reserved',
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-      };
-
-      storage.set('activeReservation', reservation);
-      return reservation;
+    if (!ticket) {
+      throw new Error('مسابقه انتخاب‌شده پیدا نشد.');
     }
 
-    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/reservations`, {
-      method: 'POST',
-      body: JSON.stringify({ ticketId, quantity }),
-    });
-    return unwrap(payload);
+    const selected = normalizeSelection(ticket, selection);
+
+    if (selected.quantity < 1) {
+      throw new Error('حداقل یک صندلی آزاد را انتخاب کنید.');
+    }
+
+    if (selected.quantity > 4) {
+      throw new Error('در هر رزرو حداکثر چهار صندلی قابل انتخاب است.');
+    }
+
+    if (selected.selectedSeats.some((seat) => seat.isReserved)) {
+      throw new Error('یکی از صندلی‌های انتخاب‌شده قبلاً رزرو شده است.');
+    }
+
+    if (!apiConfig.reservationMocks) {
+      throw new Error('اتصال رزرو واقعی در کامیت ششم فعال می‌شود.');
+    }
+
+    await delay();
+    const reservation = createLocalReservation(ticket, selected);
+    storage.set('activeReservation', reservation);
+    return reservation;
   },
 
   async pay(reservationId, paymentMethod = 'bank_card') {
-    if (apiConfig.ticketMocks) {
-      await delay(450);
-      const reservation = storage.get('activeReservation');
-
-      if (!reservation || reservation.id !== reservationId) {
-        throw new Error('رزرو فعال پیدا نشد. دوباره بلیط را رزرو کنید.');
-      }
-
-      if (new Date(reservation.expiresAt).getTime() <= Date.now()) {
-        storage.remove('activeReservation');
-        throw new Error('مهلت پرداخت رزرو به پایان رسیده است.');
-      }
-
-      const ticket = getMockTicket(reservation.ticketId);
-      if (!ticket) throw new Error('اطلاعات بلیط در دسترس نیست.');
-
-      const paidReservation = {
-        ...reservation,
-        status: 'paid',
-        statusLabel: 'پرداخت‌شده',
-        paymentMethod,
-        paidAt: new Date().toISOString(),
-        amount: ticket.price * reservation.quantity,
-        ticket: {
-          id: ticket.id,
-          sportLabel: ticket.sportLabel,
-          homeTeam: ticket.homeTeam,
-          awayTeam: ticket.awayTeam,
-          date: ticket.date,
-          isoDate: ticket.isoDate,
-          time: ticket.time,
-          city: ticket.city,
-          venue: ticket.venue,
-          category: ticket.category,
-          section: ticket.section,
-        },
-      };
-
-      const previousReservations = storage.get('reservations', []);
-      storage.set('reservations', [paidReservation, ...previousReservations]);
-      storage.remove('activeReservation');
-
-      return {
-        success: true,
-        trackingCode: `SP${Date.now().toString().slice(-9)}`,
-        reservation: paidReservation,
-      };
+    if (!apiConfig.ticketMocks) {
+      const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({ reservationId, paymentMethod }),
+      });
+      return unwrap(payload);
     }
 
-    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/payments`, {
-      method: 'POST',
-      body: JSON.stringify({ reservationId, paymentMethod }),
-    });
-    return unwrap(payload);
+    await delay(450);
+    const reservation = storage.get('activeReservation');
+
+    if (!reservation || String(reservation.id) !== String(reservationId)) {
+      throw new Error('رزرو فعال پیدا نشد. دوباره صندلی‌ها را انتخاب کنید.');
+    }
+
+    if (new Date(reservation.expiresAt).getTime() <= Date.now()) {
+      storage.remove('activeReservation');
+      throw new Error('مهلت پرداخت رزرو به پایان رسیده است.');
+    }
+
+    const paidReservation = {
+      ...reservation,
+      status: 'paid',
+      statusLabel: 'پرداخت‌شده',
+      paymentMethod,
+      paidAt: new Date().toISOString(),
+      amount: Number(reservation.amount || 0),
+    };
+
+    const previousReservations = storage.get('reservations', []);
+    storage.set('reservations', [paidReservation, ...previousReservations]);
+    storage.remove('activeReservation');
+
+    return {
+      success: true,
+      trackingCode: `SP${Date.now().toString().slice(-9)}`,
+      reservation: paidReservation,
+    };
   },
 
   async getBookings() {

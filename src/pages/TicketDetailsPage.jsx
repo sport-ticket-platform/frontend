@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowRight,
@@ -6,7 +6,6 @@ import {
   Check,
   Clock3,
   MapPin,
-  ShieldCheck,
   Ticket,
   Users,
 } from 'lucide-react';
@@ -15,24 +14,58 @@ import Loading from '../components/Loading.jsx';
 import { ticketService } from '../services/ticketService.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value);
+const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value || 0);
+
+function createFallbackConfig(ticket) {
+  const seatCount = Math.min(Number(ticket.remaining || 0), 40);
+
+  return {
+    id: `mock-${ticket.id}`,
+    configId: null,
+    category: ticket.category,
+    price: Number(ticket.price || 0),
+    remaining: Number(ticket.remaining || 0),
+    amenities: ticket.amenities || [],
+    seats: Array.from({ length: seatCount }, (_, index) => ({
+      id: `${ticket.id}-${index + 1}`,
+      seatId: index + 1,
+      section: ticket.section || 1,
+      row: ticket.row || 1,
+      number: ticket.seat || index + 1,
+      isReserved: false,
+    })),
+  };
+}
 
 export default function TicketDetailsPage() {
   const { ticketId } = useParams();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const [quantity, setQuantity] = useState(1);
   const [ticket, setTicket] = useState(null);
+  const [selectedConfigId, setSelectedConfigId] = useState('');
+  const [selectedSeatIds, setSelectedSeatIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [reserving, setReserving] = useState(false);
   const [reservationMessage, setReservationMessage] = useState('');
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setReservationMessage('');
 
     ticketService.getById(ticketId)
       .then((result) => {
-        if (active) setTicket(result);
+        if (!active) return;
+
+        setTicket(result);
+        const firstConfig = result?.configs?.[0]
+          || (result ? createFallbackConfig(result) : null);
+
+        setSelectedConfigId(
+          firstConfig
+            ? String(firstConfig.id || firstConfig.configId)
+            : '',
+        );
       })
       .catch((error) => {
         if (active) setReservationMessage(error.message);
@@ -46,14 +79,42 @@ export default function TicketDetailsPage() {
     };
   }, [ticketId]);
 
-  if (loading) return <Loading label="در حال دریافت جزئیات بلیط..." />;
+  const configs = useMemo(() => {
+    if (!ticket) return [];
+
+    return ticket.configs?.length
+      ? ticket.configs
+      : [createFallbackConfig(ticket)];
+  }, [ticket]);
+
+  const selectedConfig = useMemo(() => (
+    configs.find(
+      (config) => String(config.id || config.configId) === String(selectedConfigId),
+    ) || configs[0]
+  ), [configs, selectedConfigId]);
+
+  const availableSeats = useMemo(() => (
+    selectedConfig?.seats?.filter((seat) => !seat.isReserved) || []
+  ), [selectedConfig]);
+
+  const selectedSeats = useMemo(() => availableSeats.filter((seat) => (
+    selectedSeatIds.includes(String(seat.id || seat.seatId))
+  )), [availableSeats, selectedSeatIds]);
+
+  useEffect(() => {
+    setSelectedSeatIds([]);
+  }, [selectedConfigId]);
+
+  if (loading) {
+    return <Loading label="در حال دریافت جزئیات مسابقه و صندلی‌ها..." />;
+  }
 
   if (!ticket) {
     return (
       <section className="page-section">
         <div className="container simple-message">
-          <h1>بلیط پیدا نشد</h1>
-          <p>شناسه بلیط واردشده در فهرست مسابقات موجود نیست.</p>
+          <h1>مسابقه پیدا نشد</h1>
+          <p>{reservationMessage || 'شناسه مسابقه در سرویس Event پیدا نشد.'}</p>
           <Link className="primary-button" to="/tickets">
             بازگشت به مسابقات
           </Link>
@@ -62,16 +123,45 @@ export default function TicketDetailsPage() {
     );
   }
 
-  const totalPrice = ticket.price * quantity;
+  const quantity = selectedSeats.length;
+  const totalPrice = Number(selectedConfig?.price || 0) * quantity;
+
+  const toggleSeat = (seat) => {
+    const id = String(seat.id || seat.seatId);
+    setReservationMessage('');
+
+    setSelectedSeatIds((current) => {
+      if (current.includes(id)) {
+        return current.filter((item) => item !== id);
+      }
+
+      if (current.length >= 4) {
+        setReservationMessage('در هر رزرو حداکثر چهار صندلی قابل انتخاب است.');
+        return current;
+      }
+
+      return [...current, id];
+    });
+  };
 
   const continueReservation = async () => {
     if (!isAuthenticated) {
       navigate('/auth', {
         state: {
           from: `/tickets/${ticket.id}`,
-          message: 'برای ادامه فرایند رزرو، ابتدا وارد حساب کاربری شوید.',
+          message: 'برای انتخاب و رزرو صندلی ابتدا وارد حساب کاربری شوید.',
         },
       });
+      return;
+    }
+
+    if (!selectedConfig) {
+      setReservationMessage('رده بلیطی برای این مسابقه ثبت نشده است.');
+      return;
+    }
+
+    if (!selectedSeats.length) {
+      setReservationMessage('حداقل یک صندلی آزاد را انتخاب کنید.');
       return;
     }
 
@@ -79,7 +169,11 @@ export default function TicketDetailsPage() {
     setReservationMessage('');
 
     try {
-      await ticketService.reserve(ticket.id, quantity);
+      await ticketService.reserve(ticket.id, {
+        config: selectedConfig,
+        selectedSeats,
+        seatIds: selectedSeats.map((seat) => Number(seat.seatId)),
+      });
       navigate(`/checkout/${ticket.id}`);
     } catch (error) {
       setReservationMessage(error.message);
@@ -105,7 +199,9 @@ export default function TicketDetailsPage() {
                 <span className="sport-label">{ticket.sportLabel}</span>
                 <span className="league-label">{ticket.league}</span>
               </div>
-              <span className="ticket-category">{ticket.category}</span>
+              <span className="ticket-category">
+                {selectedConfig?.category || ticket.category}
+              </span>
             </div>
 
             <div className="details-teams">
@@ -128,7 +224,7 @@ export default function TicketDetailsPage() {
           </article>
 
           <article className="details-information-card">
-            <h2>اطلاعات مسابقه و جایگاه</h2>
+            <h2>اطلاعات مسابقه</h2>
             <p>{ticket.description}</p>
 
             <div className="details-information-grid">
@@ -149,20 +245,77 @@ export default function TicketDetailsPage() {
               </div>
               <div>
                 <Users size={18} />
-                <span>ظرفیت باقی‌مانده</span>
-                <strong>{formatNumber(ticket.remaining)} بلیط</strong>
+                <span>صندلی آزاد این رده</span>
+                <strong>{formatNumber(selectedConfig?.remaining)} صندلی</strong>
               </div>
             </div>
 
-            <h3>امکانات این جایگاه</h3>
+            <h3>امکانات این رده</h3>
             <div className="details-amenities">
-              {ticket.amenities.map((amenity) => (
-                <span key={amenity}>
-                  <Check size={15} />
-                  {amenity}
-                </span>
+              {(selectedConfig?.amenities?.length
+                ? selectedConfig.amenities
+                : ['امکاناتی ثبت نشده است']).map((amenity) => (
+                  <span key={amenity}>
+                    <Check size={15} />
+                    {amenity}
+                  </span>
               ))}
             </div>
+          </article>
+
+          <article className="details-information-card seat-selection-card">
+            <div className="seat-selection-heading">
+              <div>
+                <h2>انتخاب رده و صندلی</h2>
+                <p>
+                  صندلی‌های خاکستری قبلاً رزرو شده‌اند. حداکثر چهار صندلی انتخاب کنید.
+                </p>
+              </div>
+
+              <label>
+                رده بلیط
+                <select
+                  value={selectedConfigId}
+                  onChange={(event) => setSelectedConfigId(event.target.value)}
+                >
+                  {configs.map((config) => (
+                    <option
+                      key={config.id || config.configId}
+                      value={config.id || config.configId}
+                    >
+                      {config.category} ـ {formatNumber(config.price)} تومان
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {selectedConfig?.seats?.length ? (
+              <div className="seat-grid" aria-label="صندلی‌های مسابقه">
+                {selectedConfig.seats.map((seat) => {
+                  const id = String(seat.id || seat.seatId);
+                  const selected = selectedSeatIds.includes(id);
+
+                  return (
+                    <button
+                      key={id}
+                      className={`seat-button${selected ? ' selected' : ''}${seat.isReserved ? ' reserved' : ''}`}
+                      type="button"
+                      disabled={seat.isReserved}
+                      onClick={() => toggleSeat(seat)}
+                      title={`بخش ${seat.section}، ردیف ${seat.row}، صندلی ${seat.number}`}
+                    >
+                      <span>{seat.number}</span>
+                      <small>ر{seat.row}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="form-message info">
+                برای این رده صندلی‌ای از بک‌اند دریافت نشد.
+              </div>
+            )}
           </article>
         </div>
 
@@ -170,43 +323,31 @@ export default function TicketDetailsPage() {
           <span className="booking-title">خلاصه انتخاب</span>
 
           <div className="booking-price">
-            <small>قیمت هر بلیط</small>
-            <strong>{formatNumber(ticket.price)}</strong>
+            <small>قیمت هر صندلی</small>
+            <strong>{formatNumber(selectedConfig?.price)}</strong>
             <span>تومان</span>
           </div>
 
           <div className="booking-seat-information">
             <div>
               <span>رده بلیط</span>
-              <strong>{ticket.category}</strong>
+              <strong>{selectedConfig?.category || 'ثبت نشده'}</strong>
             </div>
             <div>
-              <span>جایگاه</span>
-              <strong>{ticket.section}</strong>
+              <span>تعداد صندلی</span>
+              <strong>{formatNumber(quantity)}</strong>
             </div>
-            <div>
-              <span>ردیف</span>
-              <strong>{ticket.row}</strong>
-            </div>
-            <div>
-              <span>شماره صندلی</span>
-              <strong>{ticket.seat}</strong>
+            <div className="selected-seat-summary">
+              <span>صندلی‌های انتخابی</span>
+              <strong>
+                {selectedSeats.length
+                  ? selectedSeats
+                    .map((seat) => `ردیف ${seat.row}، شماره ${seat.number}`)
+                    .join(' | ')
+                  : 'هنوز انتخاب نشده'}
+              </strong>
             </div>
           </div>
-
-          <label className="booking-quantity">
-            <span>تعداد بلیط</span>
-            <select
-              value={quantity}
-              onChange={(event) => setQuantity(Number(event.target.value))}
-            >
-              {[1, 2, 3, 4].filter((item) => item <= ticket.remaining).map((item) => (
-                <option key={item} value={item}>
-                  {formatNumber(item)}
-                </option>
-              ))}
-            </select>
-          </label>
 
           <div className="booking-total">
             <span>مبلغ کل</span>
@@ -217,22 +358,15 @@ export default function TicketDetailsPage() {
             className="booking-button"
             type="button"
             onClick={continueReservation}
+            disabled={reserving || !selectedSeats.length}
           >
             <Ticket size={18} />
-            ادامه فرایند رزرو
+            {reserving
+              ? 'در حال ثبت انتخاب...'
+              : 'ادامه با صندلی‌های انتخابی'}
           </button>
-
-          <p className="booking-note">
-           برای ثبت رزرو باید وارد حساب کاربری شوید.
-          </p>
-          <p className="booking-note">
-            {isAuthenticated
-              ? ' .....'
-              : 'برای ثبت رزرو باید وارد حساب کاربری شوید.'}
-          </p>
-
           {reservationMessage && (
-            <div className="form-message info booking-message">
+            <div className="form-message info booking-message" role="status">
               {reservationMessage}
             </div>
           )}
