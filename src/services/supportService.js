@@ -15,6 +15,37 @@ const reportStatusLabels = {
   resolved: 'رسیدگی‌شده',
 };
 
+const reportCategoryByType = {
+  PAYMENT_ISSUE: 'payment',
+  RESERVATION_ISSUE: 'seat',
+  CANCEL_RESERVATION: 'unexpected_cancel',
+  TECHNICAL_BUG: 'ticket_info',
+  COMPLAINT: 'other',
+  OTHER: 'other',
+};
+
+function normalizeAdminReport(report) {
+  const category = reportCategoryByType[report.type] || 'other';
+  const status = report.status === 'CLOSED' ? 'resolved' : 'pending';
+
+  return {
+    id: String(report.reportId),
+    reportId: Number(report.reportId),
+    bookingId: '---',
+    reporterName: report.userId ? `کاربر #${report.userId}` : 'کاربر',
+    reporterContact: 'در پاسخ API موجود نیست',
+    category,
+    categoryLabel: report.type || 'OTHER',
+    ticketTitle: `گزارش #${report.reportId}`,
+    description: report.request || 'جزئیات گزارش در دسترس نیست.',
+    response: report.response || null,
+    status,
+    statusLabel: status === 'resolved' ? 'رسیدگی‌شده' : 'در انتظار بررسی',
+    createdAt: report.reportedAt,
+    reviewedAt: report.respondedAt || null,
+  };
+}
+
 function initializeMockCollection(key, seed) {
   const stored = storage.get(key);
   if (Array.isArray(stored)) return stored;
@@ -70,7 +101,7 @@ function updateCollectionItem(key, itemId, updater) {
 
 export const supportService = {
   async getReports() {
-    if (apiConfig.ticketMocks) {
+    if (apiConfig.supportMocks) {
       await delay();
       const seededReports = initializeMockCollection('supportReports', supportReportSeed);
       const userReports = storage.get('reports', []).map(mapUserReport);
@@ -80,17 +111,32 @@ export const supportService = {
       ));
     }
 
-    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/admin/reports`);
-    return unwrap(payload);
+    const payload = await apiRequest(`${apiConfig.adminBaseUrl}/report`);
+    const summaries = unwrap(payload);
+    if (!Array.isArray(summaries)) return [];
+
+    const reports = await Promise.all(summaries.map(async (summary) => {
+      try {
+        const detailPayload = await apiRequest(
+          `${apiConfig.adminBaseUrl}/report/${summary.reportId}`,
+        );
+        return normalizeAdminReport(unwrap(detailPayload));
+      } catch {
+        return normalizeAdminReport(summary);
+      }
+    }));
+
+    return reports;
   },
 
-  async updateReportStatus(reportId, status) {
-    if (apiConfig.ticketMocks) {
+  async answerReport(reportId, response) {
+    if (apiConfig.supportMocks) {
       await delay(300);
       const updater = (report) => ({
         ...report,
-        status,
-        statusLabel: reportStatusLabels[status] || status,
+        response,
+        status: 'resolved',
+        statusLabel: reportStatusLabels.resolved,
         reviewedAt: new Date().toISOString(),
       });
 
@@ -103,11 +149,16 @@ export const supportService = {
       throw new Error('گزارش موردنظر پیدا نشد.');
     }
 
-    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/admin/reports/${reportId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
+    await apiRequest(`${apiConfig.adminBaseUrl}/report/${reportId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ response }),
     });
-    return unwrap(payload);
+    return {
+      response,
+      status: 'resolved',
+      statusLabel: reportStatusLabels.resolved,
+      reviewedAt: new Date().toISOString(),
+    };
   },
 
   async getReservations() {

@@ -104,15 +104,21 @@ export default function SupportPage() {
     return matchesQuery && matchesStatus;
   }), [reservations, query, statusFilter]);
 
-  const pendingReports = reports.filter((report) => report.status === 'pending').length;
   const resolvedReports = reports.filter((report) => report.status === 'resolved').length;
   const suspiciousReservations = reservations.filter((item) => item.reviewStatus === 'suspicious').length;
 
-  const changeReportStatus = async (reportId, status) => {
+  const answerReport = async (reportId) => {
+    const response = window.prompt('پاسخ نهایی گزارش را وارد کنید:');
+    if (response === null) return;
+    if (!response.trim()) {
+      setMessage({ type: 'error', text: 'پاسخ گزارش نمی‌تواند خالی باشد.' });
+      return;
+    }
+
     setWorkingId(reportId);
     setMessage(null);
     try {
-      const updatedReport = await supportService.updateReportStatus(reportId, status);
+      const updatedReport = await supportService.answerReport(reportId, response.trim());
       setReports((current) => current.map((report) => (
         report.id === reportId ? { ...report, ...updatedReport } : report
       )));
@@ -261,20 +267,12 @@ export default function SupportPage() {
                   </div>
                   <div className="support-card-actions">
                     <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={workingId === report.id || report.status === 'reviewing'}
-                      onClick={() => changeReportStatus(report.id, 'reviewing')}
-                    >
-                      در حال بررسی
-                    </button>
-                    <button
                       className="primary-button"
                       type="button"
                       disabled={workingId === report.id || report.status === 'resolved'}
-                      onClick={() => changeReportStatus(report.id, 'resolved')}
+                      onClick={() => answerReport(report.id)}
                     >
-                      رسیدگی شد
+                      ثبت پاسخ و بستن گزارش
                     </button>
                   </div>
                 </article>

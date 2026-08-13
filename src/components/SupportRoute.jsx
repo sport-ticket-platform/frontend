@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function SupportRoute() {
-  const { isAuthenticated, isSupport } = useAuth();
+  const { isAuthenticated, isAdmin } = useAuth();
   const location = useLocation();
 
   if (!isAuthenticated) {
@@ -18,7 +18,7 @@ export default function SupportRoute() {
     );
   }
 
-  if (!isSupport) {
+  if (!isAdmin) {
     return <Navigate to="/dashboard" replace />;
   }
 

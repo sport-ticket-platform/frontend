@@ -78,6 +78,7 @@ export function AuthProvider({ children }) {
     user,
     isAuthenticated: Boolean(user && storage.get('accessToken')),
     isSupport: ['SUPPORT', 'ADMIN'].includes(String(user?.role || '').toUpperCase()),
+    isAdmin: String(user?.role || '').toUpperCase() === 'ADMIN',
     loginWithPassword,
     requestOtp,
     verifyOtp,
