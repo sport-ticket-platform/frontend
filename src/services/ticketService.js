@@ -10,6 +10,33 @@ const delay = (milliseconds = 250) => new Promise((resolve) => {
 
 const unwrap = (payload) => payload?.data || payload;
 
+const reportTypeByCategory = {
+  payment: 'PAYMENT_ISSUE',
+  ticket_info: 'OTHER',
+  seat: 'RESERVATION_ISSUE',
+  schedule: 'OTHER',
+  unexpected_cancel: 'CANCEL_RESERVATION',
+  other: 'OTHER',
+};
+
+const reportStatusLabels = {
+  OPEN: 'در انتظار بررسی',
+  IN_PROGRESS: 'در حال بررسی',
+  CLOSED: 'رسیدگی‌شده',
+};
+
+function normalizeUserReport(report) {
+  return {
+    id: String(report.reportId),
+    reportId: Number(report.reportId),
+    status: report.status,
+    statusLabel: reportStatusLabels[report.status] || report.status,
+    createdAt: report.reportedAt,
+    category: 'other',
+    description: report.request || 'جزئیات گزارش در نمای فهرست ارائه نشده است.',
+  };
+}
+
 function getMockTicket(ticketId) {
   return mockTickets.find((ticket) => String(ticket.id) === String(ticketId)) || null;
 }
@@ -336,7 +363,7 @@ export const ticketService = {
   },
 
   async submitReport({ bookingId, category, description }) {
-    if (apiConfig.ticketMocks) {
+    if (apiConfig.reportMocks) {
       await delay(350);
       const booking = findStoredBooking(bookingId);
       if (!booking) throw new Error('رزرو مربوط به گزارش پیدا نشد.');
@@ -358,20 +385,35 @@ export const ticketService = {
       return report;
     }
 
-    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/reports`, {
+    const requestContent = `رزرو ${bookingId}: ${description}`.slice(0, 500);
+    const payload = await apiRequest(`${apiConfig.userBaseUrl}/report`, {
       method: 'POST',
-      body: JSON.stringify({ bookingId, category, description }),
+      body: JSON.stringify({
+        requestConent: requestContent,
+        type: reportTypeByCategory[category] || 'OTHER',
+      }),
     });
-    return unwrap(payload);
+    const reportId = unwrap(payload);
+    return {
+      id: String(reportId),
+      reportId: Number(reportId),
+      bookingId,
+      category,
+      description,
+      status: 'OPEN',
+      statusLabel: reportStatusLabels.OPEN,
+      createdAt: new Date().toISOString(),
+    };
   },
 
   async getReports() {
-    if (apiConfig.ticketMocks) {
+    if (apiConfig.reportMocks) {
       await delay(150);
       return storage.get('reports', []);
     }
 
-    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/reports/my`);
-    return unwrap(payload);
+    const payload = await apiRequest(`${apiConfig.userBaseUrl}/report`);
+    const reports = unwrap(payload);
+    return Array.isArray(reports) ? reports.map(normalizeUserReport) : [];
   },
 };

@@ -129,12 +129,12 @@ export default function ReportIssuePage() {
               توضیحات مشکل
               <textarea
                 rows="7"
-                maxLength="1000"
+                maxLength="480"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="مشکل مشاهده‌شده را با جزئیات توضیح دهید..."
               />
-              <small>{description.length} از ۱۰۰۰ کاراکتر</small>
+              <small>{description.length} از ۴۸۰ کاراکتر</small>
             </label>
 
             <button className="primary-button full-width-button" type="submit" disabled={submitting}>
