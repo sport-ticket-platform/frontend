@@ -20,6 +20,11 @@ export default function AuthPage() {
   const [signupToken, setSignupToken] = useState('');
   const [tempToken, setTempToken] = useState('');
   const [signup, setSignup] = useState(emptySignup);
+  const [resetStep, setResetStep] = useState(1);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [resetTempToken, setResetTempToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -30,12 +35,20 @@ export default function AuthPage() {
     signupInitiate,
     signupVerify,
     completeSignup,
+    resetPasswordInitiate,
+    resetPasswordVerify,
+    resetPasswordComplete,
   } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const destination = location.state?.from || '/';
 
   const heading = useMemo(() => {
+    if (mode === 'reset') {
+      if (resetStep === 2) return 'تأیید بازیابی رمز';
+      if (resetStep === 3) return 'انتخاب رمز جدید';
+      return 'بازیابی رمز عبور';
+    }
     if (mode === 'signup') {
       if (signupStep === 2) return 'تأیید ایمیل';
       if (signupStep === 3) return 'تکمیل مشخصات';
@@ -44,7 +57,7 @@ export default function AuthPage() {
     if (mode === 'otp' && mfa) return 'واردکردن کد یک‌بارمصرف';
     if (mode === 'otp') return 'ورود با کد یک‌بارمصرف';
     return 'ورود با رمز عبور';
-  }, [mode, signupStep, mfa]);
+  }, [mode, signupStep, resetStep, mfa]);
 
   const showError = (error) => {
     setMessage({ type: 'error', text: error.message || 'عملیات با خطا روبه‌رو شد.' });
@@ -185,12 +198,61 @@ export default function AuthPage() {
     }
   };
 
+  const startPasswordReset = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setMessage(null);
+    try {
+      const result = await resetPasswordInitiate(resetEmail.trim());
+      setResetToken(result.mfa_token);
+      setResetStep(2);
+      setMessage({ type: 'info', text: 'کد بازیابی به ایمیل شما ارسال شد.' });
+    } catch (error) {
+      showError(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyPasswordReset = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setMessage(null);
+    try {
+      const result = await resetPasswordVerify(resetToken, otp);
+      setResetTempToken(result.temp_token);
+      setResetStep(3);
+      setOtp('');
+    } catch (error) {
+      showError(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const completePasswordReset = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setMessage(null);
+    try {
+      await resetPasswordComplete(resetTempToken, newPassword);
+      switchMode('password');
+      setIdentifier(resetEmail);
+      setMessage({ type: 'info', text: 'رمز عبور تغییر کرد؛ اکنون وارد شوید.' });
+    } catch (error) {
+      showError(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const switchMode = (nextMode) => {
     setMode(nextMode);
     setMfa('');
     setOtp('');
     setMessage(null);
     setSignupStep(1);
+    setResetStep(1);
   };
 
   return (
@@ -258,6 +320,36 @@ export default function AuthPage() {
                 <LogIn size={18} />
                 {loading ? 'در حال ورود...' : 'ورود به حساب'}
               </button>
+              <button className="auth-text-button" type="button" onClick={() => switchMode('reset')}>
+                رمز عبور را فراموش کرده‌ام
+              </button>
+            </form>
+          )}
+
+          {mode === 'reset' && resetStep === 1 && (
+            <form className="auth-form" onSubmit={startPasswordReset} aria-busy={loading}>
+              <label>ایمیل حساب
+                <input required type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} />
+              </label>
+              <button className="auth-submit" type="submit" disabled={loading}>ارسال کد بازیابی</button>
+            </form>
+          )}
+
+          {mode === 'reset' && resetStep === 2 && (
+            <form className="auth-form" onSubmit={verifyPasswordReset} aria-busy={loading}>
+              <label>کد تأیید
+                <input required className="otp-field" inputMode="numeric" maxLength={6} value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))} />
+              </label>
+              <button className="auth-submit" type="submit" disabled={loading}>تأیید کد</button>
+            </form>
+          )}
+
+          {mode === 'reset' && resetStep === 3 && (
+            <form className="auth-form" onSubmit={completePasswordReset} aria-busy={loading}>
+              <label>رمز عبور جدید
+                <input required type="password" minLength={8} maxLength={32} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,32}" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+              </label>
+              <button className="auth-submit" type="submit" disabled={loading}>ثبت رمز جدید</button>
             </form>
           )}
 

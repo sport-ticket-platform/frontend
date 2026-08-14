@@ -311,6 +311,29 @@ export const authService = {
     return finishBackendLogin(loginPayload, email);
   },
 
+  async resetPasswordInitiate(email) {
+    const payload = await apiRequest(`${apiConfig.authBaseUrl}/reset-password/initiate`, {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    return unwrap(payload) || {};
+  },
+
+  async resetPasswordVerify(mfa, otp) {
+    const payload = await apiRequest(`${apiConfig.authBaseUrl}/reset-password/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ mfa, otp }),
+    });
+    return unwrap(payload) || {};
+  },
+
+  async resetPasswordComplete(tempToken, password) {
+    await apiRequest(`${apiConfig.authBaseUrl}/reset-password/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ temp_token: tempToken, password }),
+    });
+  },
+
   async logout() {
     const refreshToken = storage.get('refreshToken');
 

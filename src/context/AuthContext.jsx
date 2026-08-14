@@ -63,6 +63,18 @@ export function AuthProvider({ children }) {
     return session;
   }, [syncSession]);
 
+  const resetPasswordInitiate = useCallback((email) => (
+    authService.resetPasswordInitiate(email)
+  ), []);
+
+  const resetPasswordVerify = useCallback((mfa, otp) => (
+    authService.resetPasswordVerify(mfa, otp)
+  ), []);
+
+  const resetPasswordComplete = useCallback((tempToken, password) => (
+    authService.resetPasswordComplete(tempToken, password)
+  ), []);
+
   const updateUser = useCallback((updatedUser) => {
     storage.set('user', updatedUser);
     setUser(updatedUser);
@@ -85,6 +97,9 @@ export function AuthProvider({ children }) {
     signupInitiate,
     signupVerify,
     completeSignup,
+    resetPasswordInitiate,
+    resetPasswordVerify,
+    resetPasswordComplete,
     updateUser,
     logout,
   }), [
@@ -95,6 +110,9 @@ export function AuthProvider({ children }) {
     signupInitiate,
     signupVerify,
     completeSignup,
+    resetPasswordInitiate,
+    resetPasswordVerify,
+    resetPasswordComplete,
     updateUser,
     logout,
   ]);
