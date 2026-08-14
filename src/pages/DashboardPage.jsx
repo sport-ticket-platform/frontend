@@ -252,7 +252,7 @@ export default function DashboardPage() {
                           <strong>{formatNumber(booking.amount)} تومان</strong>
                           <div className="booking-actions">
                             {ticket.id && <Link to={`/tickets/${ticket.id}`}>مشاهده مسابقه</Link>}
-                            {!isCancelled && (
+                            {!isCancelled && booking.canCancel !== false && (
                               <Link className="cancel-action" to={`/dashboard/bookings/${booking.id}/cancel`}>
                                 <RotateCcw size={14} /> کنسلی
                               </Link>

@@ -227,6 +227,51 @@ async function fetchOrderDetail(orderId) {
   return normalizeOrderDetail(detail, ticket);
 }
 
+function normalizeReservationDetail(payload, ticket = null) {
+  const detail = unwrap(payload) || {};
+  const reservation = detail.reservation || detail;
+  const seats = detail.reservation_seats || [];
+  const status = String(reservation.status || '').toLowerCase();
+  const statusLabels = {
+    active: 'در انتظار پرداخت',
+    expired: 'منقضی‌شده',
+    completed: 'تکمیل‌شده',
+    cancelled: 'لغوشده',
+  };
+
+  return {
+    id: `reservation-${reservation.reservation_id}`,
+    reservationId: Number(reservation.reservation_id),
+    orderId: detail.order_id ? Number(detail.order_id) : null,
+    matchId: Number(detail.match_id || 0),
+    quantity: seats.length || 1,
+    selectedSeats: seats.map((seat) => ({
+      id: String(seat.seat_id),
+      seatId: Number(seat.seat_id),
+      section: Number(seat.section || 0),
+      row: Number(seat.row_no || 0),
+      number: Number(seat.seat_no || 0),
+    })),
+    status,
+    statusLabel: statusLabels[status] || reservation.status,
+    createdAt: reservation.created_at,
+    expiresAt: reservation.expires_at,
+    canCancel: false,
+    reservationSource: 'backend',
+    ticket,
+  };
+}
+
+async function fetchReservationDetail(reservationId) {
+  const payload = await apiRequest(
+    `${apiConfig.reservationBaseUrl}/reserve/${reservationId}`,
+  );
+  const detail = unwrap(payload) || {};
+  const matchId = detail.match_id;
+  const ticket = matchId ? await eventService.getMatchDetails(matchId).catch(() => null) : null;
+  return normalizeReservationDetail(detail, ticket);
+}
+
 export const ticketService = {
   async getById(ticketId) {
     return eventService.getMatchDetails(ticketId);
@@ -362,12 +407,29 @@ export const ticketService = {
       return storage.get('reservations', []).map(enrichBooking);
     }
 
-    const payload = await apiRequest(
-      `${apiConfig.reservationBaseUrl}/order/history?page=0&page_size=50`,
+    const [orderPayload, reservationPayload] = await Promise.all([
+      apiRequest(`${apiConfig.reservationBaseUrl}/order/history?page=0&page_size=50`),
+      apiRequest(`${apiConfig.reservationBaseUrl}/reserve/history?page=0&page_size=50`),
+    ]);
+    const orderPage = unwrap(orderPayload) || {};
+    const reservationPage = unwrap(reservationPayload) || {};
+    const orders = Array.isArray(orderPage.data) ? orderPage.data : [];
+    const reservations = Array.isArray(reservationPage.data) ? reservationPage.data : [];
+    const orderedReservationIds = new Set(orders.map((order) => Number(order.reservation_id)));
+    const standaloneReservations = reservations.filter(
+      (reservation) => !orderedReservationIds.has(Number(reservation.reservation_id)),
     );
-    const page = unwrap(payload) || {};
-    const orders = Array.isArray(page.data) ? page.data : [];
-    return Promise.all(orders.map((order) => fetchOrderDetail(order.order_id)));
+
+    const [orderItems, reservationItems] = await Promise.all([
+      Promise.all(orders.map((order) => fetchOrderDetail(order.order_id))),
+      Promise.all(standaloneReservations.map(
+        (reservation) => fetchReservationDetail(reservation.reservation_id),
+      )),
+    ]);
+
+    return [...orderItems, ...reservationItems].sort(
+      (first, second) => new Date(second.createdAt) - new Date(first.createdAt),
+    );
   },
 
   async getBookingById(bookingId) {
@@ -376,6 +438,10 @@ export const ticketService = {
       return enrichBooking(findStoredBooking(bookingId));
     }
 
+    const value = String(bookingId);
+    if (value.startsWith('reservation-')) {
+      return fetchReservationDetail(value.replace('reservation-', ''));
+    }
     return fetchOrderDetail(bookingId);
   },
 
