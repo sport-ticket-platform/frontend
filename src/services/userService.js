@@ -55,4 +55,15 @@ export const userService = {
     storage.set('user', updatedProfile);
     return updatedProfile;
   },
+
+  async searchCities(searchTerm = '', limit = 20, offset = 0) {
+    const params = new URLSearchParams({
+      searchTerm,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    const payload = await apiRequest(`${apiConfig.userBaseUrl}/cities?${params.toString()}`);
+    const cities = unwrap(payload);
+    return Array.isArray(cities) ? cities : [];
+  },
 };

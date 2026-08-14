@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [bookings, setBookings] = useState([]);
   const [reports, setReports] = useState([]);
   const [profile, setProfile] = useState(user || {});
+  const [cities, setCities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -63,12 +64,14 @@ export default function DashboardPage() {
       ticketService.getBookings(),
       ticketService.getReports(),
       userService.getProfile().catch(() => user),
+      userService.searchCities('', 40, 0).catch(() => []),
     ])
-      .then(([items, reportItems, fetchedProfile]) => {
+      .then(([items, reportItems, fetchedProfile, cityItems]) => {
         if (!active) return;
         setBookings(Array.isArray(items) ? items : []);
         setReports(Array.isArray(reportItems) ? reportItems : []);
         if (fetchedProfile) setProfile({ ...user, ...fetchedProfile });
+        setCities(cityItems);
       })
       .catch((error) => {
         if (active) setMessage({ type: 'error', text: error.message });
@@ -323,10 +326,14 @@ export default function DashboardPage() {
                 <label>
                   شهر محل سکونت
                   <input
+                    list="profile-city-options"
                     value={profile.city || ''}
                     onChange={(event) => setProfile({ ...profile, city: event.target.value })}
                     placeholder="مثلاً تهران"
                   />
+                  <datalist id="profile-city-options">
+                    {cities.map((city) => <option key={city.cityId} value={city.name} />)}
+                  </datalist>
                 </label>
                 <button className="primary-button profile-save-button" type="submit" disabled={saving}>
                   {saving ? 'در حال ذخیره...' : 'ذخیره تغییرات'}

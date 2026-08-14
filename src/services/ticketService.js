@@ -25,6 +25,15 @@ const reportStatusLabels = {
   CLOSED: 'رسیدگی‌شده',
 };
 
+const reportCategoryByType = {
+  PAYMENT_ISSUE: 'payment',
+  RESERVATION_ISSUE: 'seat',
+  CANCEL_RESERVATION: 'unexpected_cancel',
+  TECHNICAL_BUG: 'ticket_info',
+  COMPLAINT: 'other',
+  OTHER: 'other',
+};
+
 function normalizeUserReport(report) {
   return {
     id: String(report.reportId),
@@ -32,8 +41,10 @@ function normalizeUserReport(report) {
     status: report.status,
     statusLabel: reportStatusLabels[report.status] || report.status,
     createdAt: report.reportedAt,
-    category: 'other',
+    category: reportCategoryByType[report.type] || 'other',
     description: report.request || 'جزئیات گزارش در نمای فهرست ارائه نشده است.',
+    response: report.response || null,
+    respondedAt: report.respondedAt || null,
   };
 }
 
@@ -471,6 +482,14 @@ export const ticketService = {
 
     const payload = await apiRequest(`${apiConfig.userBaseUrl}/report`);
     const reports = unwrap(payload);
-    return Array.isArray(reports) ? reports.map(normalizeUserReport) : [];
+    if (!Array.isArray(reports)) return [];
+    return Promise.all(reports.map(async (report) => {
+      try {
+        const detail = await apiRequest(`${apiConfig.userBaseUrl}/report/${report.reportId}`);
+        return normalizeUserReport(unwrap(detail));
+      } catch {
+        return normalizeUserReport(report);
+      }
+    }));
   },
 };
