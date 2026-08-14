@@ -19,7 +19,7 @@ export const storage = {
   },
 
   clearSession() {
-    ['accessToken', 'refreshToken', 'user', 'mockSession'].forEach((key) => {
+    ['accessToken', 'refreshToken', 'user'].forEach((key) => {
       this.remove(key);
     });
   },

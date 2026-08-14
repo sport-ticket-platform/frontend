@@ -1,10 +1,5 @@
 import { apiRequest } from './apiClient.js';
 import { apiConfig } from './apiConfig.js';
-import {
-  cities as mockCities,
-  sports as mockSports,
-  tickets as mockTickets,
-} from '../data/mockData.js';
 
 const unwrap = (payload) => payload?.data ?? payload;
 
@@ -253,10 +248,6 @@ async function enrichMatches(matches) {
 
 export const eventService = {
   async searchMatches(filters = {}) {
-    if (apiConfig.eventMocks) {
-      return filterNormalizedMatches(mockTickets, filters);
-    }
-
     const payload = await apiRequest(`${apiConfig.eventBaseUrl}/match`, {
       method: 'POST',
       body: JSON.stringify({
@@ -275,12 +266,6 @@ export const eventService = {
   },
 
   async getMatchDetails(matchId) {
-    if (apiConfig.eventMocks) {
-      return mockTickets.find(
-        (ticket) => String(ticket.id) === String(matchId),
-      ) || null;
-    }
-
     let match = matchCache.find(
       (item) => String(item.matchId) === String(matchId),
     );
@@ -307,13 +292,6 @@ export const eventService = {
   },
 
   async getMetadata() {
-    if (apiConfig.eventMocks) {
-      return {
-        sports: mockSports,
-        cities: mockCities,
-      };
-    }
-
     const [venuesResult, leaguesResult] = await Promise.allSettled([
       apiRequest(`${apiConfig.eventBaseUrl}/venues?limit=40&offset=0`),
       apiRequest(`${apiConfig.eventBaseUrl}/leagues?limit=40&offset=0`),
@@ -347,8 +325,8 @@ export const eventService = {
     ];
 
     return {
-      sports: sports.length ? sports : mockSports,
-      cities: cities.length ? cities : mockCities,
+      sports,
+      cities,
     };
   },
 };

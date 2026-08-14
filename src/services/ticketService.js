@@ -2,11 +2,6 @@ import { apiRequest } from './apiClient.js';
 import { apiConfig } from './apiConfig.js';
 import { storage } from './storage.js';
 import { eventService } from './eventService.js';
-import { tickets as mockTickets } from '../data/mockData.js';
-
-const delay = (milliseconds = 250) => new Promise((resolve) => {
-  window.setTimeout(resolve, milliseconds);
-});
 
 const unwrap = (payload) => payload?.data || payload;
 
@@ -48,89 +43,6 @@ function normalizeUserReport(report) {
   };
 }
 
-function getMockTicket(ticketId) {
-  return mockTickets.find((ticket) => String(ticket.id) === String(ticketId)) || null;
-}
-
-function normalizeDigits(value = '') {
-  return String(value)
-    .replace(/[۰-۹]/g, (digit) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))
-    .replace(/[٠-٩]/g, (digit) => '٠١٢٣٤٥٦٧٨٩'.indexOf(digit));
-}
-
-function getEventDate(ticket) {
-  if (!ticket?.isoDate) return null;
-  const time = normalizeDigits(ticket.time || '00:00');
-  const date = new Date(`${ticket.isoDate}T${time}:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function findStoredBooking(bookingId) {
-  const reservations = storage.get('reservations', []);
-  return reservations.find((item) => item.id === bookingId) || null;
-}
-
-function enrichBooking(booking) {
-  if (!booking) return null;
-  const sourceTicket = getMockTicket(booking.ticketId || booking.ticket?.id);
-  return {
-    ...booking,
-    ticket: {
-      ...(sourceTicket || {}),
-      ...(booking.ticket || {}),
-    },
-  };
-}
-
-function calculatePenalty(booking) {
-  const completeBooking = enrichBooking(booking);
-  const eventDate = getEventDate(completeBooking?.ticket);
-  const amount = Number(completeBooking?.amount || 0);
-
-  if (!eventDate) {
-    return {
-      canCancel: true,
-      penaltyPercent: 20,
-      penaltyAmount: Math.round(amount * 0.2),
-      refundAmount: Math.round(amount * 0.8),
-      ruleLabel: 'جریمه پیش‌فرض نسخه آزمایشی',
-    };
-  }
-
-  const remainingHours = (eventDate.getTime() - Date.now()) / (60 * 60 * 1000);
-
-  if (remainingHours <= 0) {
-    return {
-      canCancel: false,
-      penaltyPercent: 100,
-      penaltyAmount: amount,
-      refundAmount: 0,
-      ruleLabel: 'پس از شروع مسابقه امکان کنسلی وجود ندارد.',
-    };
-  }
-
-  let penaltyPercent = 10;
-  let ruleLabel = 'بیش از ۷۲ ساعت تا شروع مسابقه';
-
-  if (remainingHours <= 24) {
-    penaltyPercent = 50;
-    ruleLabel = 'کمتر از ۲۴ ساعت تا شروع مسابقه';
-  } else if (remainingHours <= 72) {
-    penaltyPercent = 30;
-    ruleLabel = 'بین ۲۴ تا ۷۲ ساعت تا شروع مسابقه';
-  }
-
-  const penaltyAmount = Math.round((amount * penaltyPercent) / 100);
-  return {
-    canCancel: true,
-    penaltyPercent,
-    penaltyAmount,
-    refundAmount: Math.max(amount - penaltyAmount, 0),
-    ruleLabel,
-  };
-}
-
-
 function normalizeSelection(ticket, selection) {
   if (typeof selection === 'number') {
     const config = ticket.configs?.[0];
@@ -160,7 +72,7 @@ function normalizeSelection(ticket, selection) {
   };
 }
 
-function createStoredReservation(ticket, selected, data = null, source = 'mock') {
+function createStoredReservation(ticket, selected, data) {
   const unitPrice = Number(selected.config?.price || ticket.price || 0);
   const orderId = data?.order_id ?? data?.orderId ?? null;
   const expiresAt = data?.expires_at
@@ -184,8 +96,8 @@ function createStoredReservation(ticket, selected, data = null, source = 'mock')
     unitPrice,
     amount: unitPrice * selected.quantity,
     status: 'reserved',
-    statusLabel: source === 'backend' ? 'رزروشده در بک‌اند' : 'رزروشده آزمایشی',
-    reservationSource: source,
+    statusLabel: 'رزروشده',
+    reservationSource: 'backend',
     createdAt: new Date().toISOString(),
     expiresAt,
     ticket,
@@ -307,13 +219,6 @@ export const ticketService = {
       throw new Error('یکی از صندلی‌های انتخاب‌شده قبلاً رزرو شده است.');
     }
 
-    if (apiConfig.reservationMocks) {
-      await delay();
-      const reservation = createStoredReservation(ticket, selected);
-      storage.set('activeReservation', reservation);
-      return reservation;
-    }
-
     const payload = await apiRequest(`${apiConfig.reservationBaseUrl}/reserve`, {
       method: 'POST',
       body: JSON.stringify({ seat_ids: uniqueSeatIds }),
@@ -335,61 +240,27 @@ export const ticketService = {
       ticket,
       { ...selected, seatIds: uniqueSeatIds },
       data,
-      'backend',
     );
 
     storage.set('activeReservation', reservation);
     return reservation;
   },
 
-  async pay(reservationId, paymentMethod = 'bank_card') {
-    if (!apiConfig.paymentMocks) {
-      const payload = await apiRequest(`${apiConfig.reservationBaseUrl}/payment/request`, {
-        method: 'POST',
-        body: JSON.stringify({ order_id: Number(reservationId) }),
-      });
-      const payment = unwrap(payload) || {};
-      if (!payment.token) throw new Error('توکن پرداخت از سرور دریافت نشد.');
+  async pay(reservationId) {
+    const payload = await apiRequest(`${apiConfig.reservationBaseUrl}/payment/request`, {
+      method: 'POST',
+      body: JSON.stringify({ order_id: Number(reservationId) }),
+    });
+    const payment = unwrap(payload) || {};
+    if (!payment.token) throw new Error('توکن پرداخت از سرور دریافت نشد.');
 
-      const gatewayPayload = await apiRequest(
-        `${apiConfig.reservationBaseUrl}/mock-gateway/info/${payment.token}`,
-      );
-
-      return {
-        token: payment.token,
-        gatewayInfo: unwrap(gatewayPayload) || {},
-      };
-    }
-
-    await delay(450);
-    const reservation = storage.get('activeReservation');
-
-    if (!reservation || String(reservation.id) !== String(reservationId)) {
-      throw new Error('رزرو فعال پیدا نشد. دوباره صندلی‌ها را انتخاب کنید.');
-    }
-
-    if (new Date(reservation.expiresAt).getTime() <= Date.now()) {
-      storage.remove('activeReservation');
-      throw new Error('مهلت پرداخت رزرو به پایان رسیده است.');
-    }
-
-    const paidReservation = {
-      ...reservation,
-      status: 'paid',
-      statusLabel: 'پرداخت‌شده',
-      paymentMethod,
-      paidAt: new Date().toISOString(),
-      amount: Number(reservation.amount || 0),
-    };
-
-    const previousReservations = storage.get('reservations', []);
-    storage.set('reservations', [paidReservation, ...previousReservations]);
-    storage.remove('activeReservation');
+    const gatewayPayload = await apiRequest(
+      `${apiConfig.reservationBaseUrl}/mock-gateway/info/${payment.token}`,
+    );
 
     return {
-      success: true,
-      trackingCode: `SP${Date.now().toString().slice(-9)}`,
-      reservation: paidReservation,
+      token: payment.token,
+      gatewayInfo: unwrap(gatewayPayload) || {},
     };
   },
 
@@ -402,11 +273,6 @@ export const ticketService = {
   },
 
   async getBookings() {
-    if (apiConfig.bookingMocks) {
-      await delay(180);
-      return storage.get('reservations', []).map(enrichBooking);
-    }
-
     const [orderPayload, reservationPayload] = await Promise.all([
       apiRequest(`${apiConfig.reservationBaseUrl}/order/history?page=0&page_size=50`),
       apiRequest(`${apiConfig.reservationBaseUrl}/reserve/history?page=0&page_size=50`),
@@ -433,11 +299,6 @@ export const ticketService = {
   },
 
   async getBookingById(bookingId) {
-    if (apiConfig.bookingMocks) {
-      await delay(140);
-      return enrichBooking(findStoredBooking(bookingId));
-    }
-
     const value = String(bookingId);
     if (value.startsWith('reservation-')) {
       return fetchReservationDetail(value.replace('reservation-', ''));
@@ -445,80 +306,7 @@ export const ticketService = {
     return fetchOrderDetail(bookingId);
   },
 
-  async getCancellationPenalty(bookingId) {
-    if (apiConfig.ticketMocks) {
-      await delay(180);
-      const booking = findStoredBooking(bookingId);
-      if (!booking) throw new Error('رزرو موردنظر پیدا نشد.');
-      if (booking.status === 'cancelled') throw new Error('این بلیط قبلاً کنسل شده است.');
-      return calculatePenalty(booking);
-    }
-
-    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/bookings/${bookingId}/cancellation-penalty`);
-    return unwrap(payload);
-  },
-
-  async cancelBooking(bookingId, reason = '') {
-    if (apiConfig.ticketMocks) {
-      await delay(420);
-      const reservations = storage.get('reservations', []);
-      const index = reservations.findIndex((item) => item.id === bookingId);
-
-      if (index === -1) throw new Error('رزرو موردنظر پیدا نشد.');
-      if (reservations[index].status === 'cancelled') throw new Error('این بلیط قبلاً کنسل شده است.');
-
-      const penalty = calculatePenalty(reservations[index]);
-      if (!penalty.canCancel) throw new Error(penalty.ruleLabel);
-
-      const cancelledBooking = {
-        ...reservations[index],
-        status: 'cancelled',
-        statusLabel: 'کنسل‌شده',
-        cancelledAt: new Date().toISOString(),
-        cancellationReason: reason,
-        penaltyPercent: penalty.penaltyPercent,
-        penaltyAmount: penalty.penaltyAmount,
-        refundAmount: penalty.refundAmount,
-        refundStatus: 'پرداخت به کیف پول آزمایشی',
-      };
-
-      const updatedReservations = [...reservations];
-      updatedReservations[index] = cancelledBooking;
-      storage.set('reservations', updatedReservations);
-
-      return enrichBooking(cancelledBooking);
-    }
-
-    const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/bookings/${bookingId}/cancel`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
-    return unwrap(payload);
-  },
-
   async submitReport({ bookingId, category, description }) {
-    if (apiConfig.reportMocks) {
-      await delay(350);
-      const booking = findStoredBooking(bookingId);
-      if (!booking) throw new Error('رزرو مربوط به گزارش پیدا نشد.');
-
-      const report = {
-        id: `rp-${Date.now()}`,
-        bookingId,
-        ticketId: booking.ticketId || booking.ticket?.id,
-        category,
-        description,
-        status: 'pending',
-        statusLabel: 'در انتظار بررسی',
-        createdAt: new Date().toISOString(),
-        ticket: enrichBooking(booking).ticket,
-      };
-
-      const reports = storage.get('reports', []);
-      storage.set('reports', [report, ...reports]);
-      return report;
-    }
-
     const requestContent = `رزرو ${bookingId}: ${description}`.slice(0, 500);
     const payload = await apiRequest(`${apiConfig.userBaseUrl}/report`, {
       method: 'POST',
@@ -541,11 +329,6 @@ export const ticketService = {
   },
 
   async getReports() {
-    if (apiConfig.reportMocks) {
-      await delay(150);
-      return storage.get('reports', []);
-    }
-
     const payload = await apiRequest(`${apiConfig.userBaseUrl}/report`);
     const reports = unwrap(payload);
     if (!Array.isArray(reports)) return [];

@@ -1,12 +1,11 @@
 import { Search } from 'lucide-react';
-import { cities as fallbackCities, sports as fallbackSports } from '../data/mockData.js';
 
 export default function SearchPanel({
   filters,
   onChange,
   onSubmit,
-  sports = fallbackSports,
-  cities = fallbackCities,
+  sports = [],
+  cities = [],
   disabled = false,
 }) {
   const updateField = (event) => {

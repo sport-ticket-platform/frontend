@@ -2,6 +2,7 @@ import { apiConfig } from './apiConfig.js';
 import { storage } from './storage.js';
 
 const DEVICE_ID_KEY = 'deviceId';
+let refreshPromise = null;
 
 function getDeviceId() {
   let deviceId = storage.get(DEVICE_ID_KEY);
@@ -102,6 +103,15 @@ async function refreshAccessToken() {
   return data.access_token;
 }
 
+function getRefreshedAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 export async function apiRequest(url, options = {}, retry = true) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), apiConfig.timeoutMs);
@@ -123,7 +133,7 @@ export async function apiRequest(url, options = {}, retry = true) {
     });
 
     if (response.status === 401 && retry && storage.get('refreshToken')) {
-      const refreshedToken = await refreshAccessToken();
+      const refreshedToken = await getRefreshedAccessToken();
       if (refreshedToken) return apiRequest(url, options, false);
     }
 

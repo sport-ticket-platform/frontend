@@ -8,7 +8,6 @@ import {
   MapPin,
   PencilLine,
   ReceiptText,
-  RotateCcw,
   TicketCheck,
   UserRound,
 } from 'lucide-react';
@@ -208,7 +207,7 @@ export default function DashboardPage() {
               <div className="dashboard-panel-title">
                 <div>
                   <h2>خریدها و رزروها</h2>
-                  <p>وضعیت بلیط، کنسلی و گزارش مشکلات را از این قسمت مدیریت کنید.</p>
+                  <p>وضعیت بلیط و گزارش مشکلات را از این قسمت مدیریت کنید.</p>
                 </div>
                 <Link className="secondary-button dashboard-small-button" to="/tickets">
                   خرید بلیط جدید
@@ -252,11 +251,6 @@ export default function DashboardPage() {
                           <strong>{formatNumber(booking.amount)} تومان</strong>
                           <div className="booking-actions">
                             {ticket.id && <Link to={`/tickets/${ticket.id}`}>مشاهده مسابقه</Link>}
-                            {!isCancelled && booking.canCancel !== false && (
-                              <Link className="cancel-action" to={`/dashboard/bookings/${booking.id}/cancel`}>
-                                <RotateCcw size={14} /> کنسلی
-                              </Link>
-                            )}
                             <Link className="report" to={`/dashboard/bookings/${booking.id}/report`}>
                               <CircleAlert size={14} /> گزارش مشکل
                             </Link>
@@ -347,7 +341,7 @@ export default function DashboardPage() {
               <div className="dashboard-panel-title">
                 <div>
                   <h2>تاریخچه تراکنش‌ها</h2>
-                  <p>پرداخت‌های انجام‌شده در نسخه آزمایشی پروژه.</p>
+                  <p>پرداخت‌های ثبت‌شده در سرویس رزرو.</p>
                 </div>
               </div>
 

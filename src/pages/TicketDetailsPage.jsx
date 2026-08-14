@@ -16,27 +16,6 @@ import { useAuth } from '../context/AuthContext.jsx';
 
 const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value || 0);
 
-function createFallbackConfig(ticket) {
-  const seatCount = Math.min(Number(ticket.remaining || 0), 40);
-
-  return {
-    id: `mock-${ticket.id}`,
-    configId: null,
-    category: ticket.category,
-    price: Number(ticket.price || 0),
-    remaining: Number(ticket.remaining || 0),
-    amenities: ticket.amenities || [],
-    seats: Array.from({ length: seatCount }, (_, index) => ({
-      id: `${ticket.id}-${index + 1}`,
-      seatId: index + 1,
-      section: ticket.section || 1,
-      row: ticket.row || 1,
-      number: ticket.seat || index + 1,
-      isReserved: false,
-    })),
-  };
-}
-
 export default function TicketDetailsPage() {
   const { ticketId } = useParams();
   const navigate = useNavigate();
@@ -58,8 +37,7 @@ export default function TicketDetailsPage() {
         if (!active) return;
 
         setTicket(result);
-        const firstConfig = result?.configs?.[0]
-          || (result ? createFallbackConfig(result) : null);
+        const firstConfig = result?.configs?.[0] || null;
 
         setSelectedConfigId(
           firstConfig
@@ -82,9 +60,7 @@ export default function TicketDetailsPage() {
   const configs = useMemo(() => {
     if (!ticket) return [];
 
-    return ticket.configs?.length
-      ? ticket.configs
-      : [createFallbackConfig(ticket)];
+    return ticket.configs?.length ? ticket.configs : [];
   }, [ticket]);
 
   const selectedConfig = useMemo(() => (

@@ -4,7 +4,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import SearchPanel from '../components/SearchPanel.jsx';
 import TicketCard from '../components/TicketCard.jsx';
 import Loading from '../components/Loading.jsx';
-import { cities as fallbackCities, sports as fallbackSports } from '../data/mockData.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { eventService } from '../services/eventService.js';
 
@@ -26,8 +25,8 @@ export default function TicketsPage() {
   const [sortBy, setSortBy] = useState('soonest');
   const [tickets, setTickets] = useState([]);
   const [metadata, setMetadata] = useState({
-    sports: fallbackSports,
-    cities: fallbackCities,
+    sports: [],
+    cities: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,9 +34,13 @@ export default function TicketsPage() {
   useEffect(() => {
     let active = true;
 
-    eventService.getMetadata().then((result) => {
-      if (active) setMetadata(result);
-    });
+    eventService.getMetadata()
+      .then((result) => {
+        if (active) setMetadata(result);
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.message);
+      });
 
     return () => {
       active = false;

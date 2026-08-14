@@ -104,7 +104,7 @@ export default function AuthPage() {
       setMfa(result.mfa);
       setMessage({
         type: 'info',
-        text: result.demoOtp ? `کد آزمایشی ورود: ${result.demoOtp}` : 'کد ورود ارسال شد.',
+        text: 'کد ورود ارسال شد.',
       });
     } catch (error) {
       showError(error);
@@ -147,7 +147,7 @@ export default function AuthPage() {
       setSignupStep(2);
       setMessage({
         type: 'info',
-        text: result.demoOtp ? `کد آزمایشی ثبت‌نام: ${result.demoOtp}` : 'کد تأیید ایمیل ارسال شد.',
+        text: 'کد تأیید ایمیل ارسال شد.',
       });
     } catch (error) {
       showError(error);

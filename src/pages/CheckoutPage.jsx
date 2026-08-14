@@ -17,7 +17,6 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [ticket, setTicket] = useState(null);
   const [reservation, setReservation] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState('bank_card');
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [message, setMessage] = useState(null);
@@ -103,10 +102,7 @@ export default function CheckoutPage() {
     setMessage(null);
 
     try {
-      const result = await ticketService.pay(
-        reservation.id,
-        paymentMethod,
-      );
+      const result = await ticketService.pay(reservation.id);
       if (result.token) setPaymentSession(result);
       else setPaymentResult(result);
     } catch (error) {
@@ -165,9 +161,9 @@ export default function CheckoutPage() {
       <section className="payment-success-section">
         <div className="container payment-success-card">
           <CheckCircle2 size={48} />
-          <h1>پرداخت آزمایشی با موفقیت انجام شد</h1>
+          <h1>پرداخت با موفقیت انجام شد</h1>
           <p>
-            پرداخت فقط در مرورگر برای مسابقه{' '}
+            پرداخت برای مسابقه{' '}
             <strong>
               {ticket.homeTeam} - {ticket.awayTeam}
             </strong>{' '}
@@ -195,7 +191,7 @@ export default function CheckoutPage() {
       <section className="payment-success-section">
         <div className="container payment-success-card">
           <Clock3 size={48} />
-          <h1>درگاه آزمایشی پرداخت</h1>
+          <h1>درگاه پرداخت</h1>
           <p>مبلغ نهایی: <strong>{formatNumber(gateway.total_amount)} تومان</strong></p>
           <p>کارمزد: {formatNumber(gateway.percentage_amount)} تومان</p>
           {message && <div className={`form-message ${message.type}`}>{message.text}</div>}
@@ -226,7 +222,7 @@ export default function CheckoutPage() {
           <div className="checkout-heading">
             <div>
               <span className="page-label">مرحله نهایی</span>
-              <h1>انتخاب روش پرداخت</h1>
+              <h1>تکمیل پرداخت</h1>
             </div>
             <div className={`reservation-countdown${countdown.seconds < 120 ? ' warning' : ''}`}>
               <Clock3 size={19} />
@@ -234,50 +230,6 @@ export default function CheckoutPage() {
               <strong>{countdown.formatted}</strong>
             </div>
           </div>
-          <div className="payment-method-list">
-            <label className={paymentMethod === 'bank_card' ? 'selected' : ''}>
-              <input
-                type="radio"
-                name="paymentMethod"
-                value="bank_card"
-                checked={paymentMethod === 'bank_card'}
-                onChange={(event) => setPaymentMethod(event.target.value)}
-              />
-              <span>
-                <strong>کارت بانکی</strong>
-                <small>پرداخت آزمایشی از درگاه محلی</small>
-              </span>
-            </label>
-
-            <label className={paymentMethod === 'wallet' ? 'selected' : ''}>
-              <input
-                type="radio"
-                name="paymentMethod"
-                value="wallet"
-                checked={paymentMethod === 'wallet'}
-                onChange={(event) => setPaymentMethod(event.target.value)}
-              />
-              <span>
-                <strong>کیف پول</strong>
-                <small>پرداخت از موجودی آزمایشی حساب</small>
-              </span>
-            </label>
-
-            <label className={paymentMethod === 'local_gateway' ? 'selected' : ''}>
-              <input
-                type="radio"
-                name="paymentMethod"
-                value="local_gateway"
-                checked={paymentMethod === 'local_gateway'}
-                onChange={(event) => setPaymentMethod(event.target.value)}
-              />
-              <span>
-                <strong>درگاه محلی پروژه</strong>
-                <small>بدون اتصال به شبکه بانکی واقعی</small>
-              </span>
-            </label>
-          </div>
-
           {message && (
             <div className={`form-message ${message.type}`} role="status">
               {message.text}
@@ -294,7 +246,7 @@ export default function CheckoutPage() {
               ? 'زمان انتخاب پایان یافته است'
               : paying
                 ? 'در حال ثبت پرداخت...'
-                : `پرداخت آزمایشی ${formatNumber(totalPrice)} تومان`}
+                : `پرداخت ${formatNumber(totalPrice)} تومان`}
           </button>
 
           {countdown.expired && (
@@ -322,11 +274,7 @@ export default function CheckoutPage() {
             </div>
             <div>
               <span>نوع رزرو</span>
-              <strong>
-                {reservation.reservationSource === 'backend'
-                  ? 'ثبت‌شده در Reservation API'
-                  : 'رزرو آزمایشی'}
-              </strong>
+              <strong>ثبت‌شده در Reservation API</strong>
             </div>
             <div>
               <span>رده بلیط</span>
