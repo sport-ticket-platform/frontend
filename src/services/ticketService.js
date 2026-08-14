@@ -287,12 +287,22 @@ export const ticketService = {
   },
 
   async pay(reservationId, paymentMethod = 'bank_card') {
-    if (!apiConfig.ticketMocks) {
-      const payload = await apiRequest(`${apiConfig.ticketBaseUrl}/payments`, {
+    if (!apiConfig.paymentMocks) {
+      const payload = await apiRequest(`${apiConfig.reservationBaseUrl}/payment/request`, {
         method: 'POST',
-        body: JSON.stringify({ reservationId, paymentMethod }),
+        body: JSON.stringify({ order_id: Number(reservationId) }),
       });
-      return unwrap(payload);
+      const payment = unwrap(payload) || {};
+      if (!payment.token) throw new Error('توکن پرداخت از سرور دریافت نشد.');
+
+      const gatewayPayload = await apiRequest(
+        `${apiConfig.reservationBaseUrl}/mock-gateway/info/${payment.token}`,
+      );
+
+      return {
+        token: payment.token,
+        gatewayInfo: unwrap(gatewayPayload) || {},
+      };
     }
 
     await delay(450);
@@ -325,6 +335,14 @@ export const ticketService = {
       trackingCode: `SP${Date.now().toString().slice(-9)}`,
       reservation: paidReservation,
     };
+  },
+
+  async completePayment(token, status) {
+    const payload = await apiRequest(`${apiConfig.reservationBaseUrl}/payment/callback`, {
+      method: 'POST',
+      body: JSON.stringify({ token, status }),
+    });
+    return unwrap(payload) || {};
   },
 
   async getBookings() {

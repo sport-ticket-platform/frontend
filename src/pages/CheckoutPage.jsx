@@ -21,6 +21,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [message, setMessage] = useState(null);
+  const [paymentSession, setPaymentSession] = useState(null);
   const [paymentResult, setPaymentResult] = useState(null);
   const countdown = useCountdown(reservation?.expiresAt);
 
@@ -106,12 +107,36 @@ export default function CheckoutPage() {
         reservation.id,
         paymentMethod,
       );
-      setPaymentResult(result);
+      if (result.token) setPaymentSession(result);
+      else setPaymentResult(result);
     } catch (error) {
       setMessage({
         type: 'error',
         text: error.message,
       });
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const finishPayment = async (status) => {
+    if (!paymentSession?.token) return;
+    setPaying(true);
+    setMessage(null);
+    try {
+      const result = await ticketService.completePayment(paymentSession.token, status);
+      if (status === 'FAILED') {
+        setPaymentSession(null);
+        setMessage({ type: 'error', text: 'پرداخت ناموفق ثبت شد؛ می‌توانید دوباره تلاش کنید.' });
+        return;
+      }
+      storage.remove('activeReservation');
+      setPaymentResult({
+        success: true,
+        trackingCode: result.ref_id || result.refId || 'ثبت‌شده',
+      });
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message });
     } finally {
       setPaying(false);
     }
@@ -158,6 +183,29 @@ export default function CheckoutPage() {
             <Link className="secondary-button" to="/tickets">
               خرید بلیط دیگر
             </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (paymentSession) {
+    const gateway = paymentSession.gatewayInfo || {};
+    return (
+      <section className="payment-success-section">
+        <div className="container payment-success-card">
+          <Clock3 size={48} />
+          <h1>درگاه آزمایشی پرداخت</h1>
+          <p>مبلغ نهایی: <strong>{formatNumber(gateway.total_amount)} تومان</strong></p>
+          <p>کارمزد: {formatNumber(gateway.percentage_amount)} تومان</p>
+          {message && <div className={`form-message ${message.type}`}>{message.text}</div>}
+          <div className="payment-success-actions">
+            <button className="primary-button" type="button" disabled={paying} onClick={() => finishPayment('SUCCESS')}>
+              پرداخت موفق
+            </button>
+            <button className="secondary-button" type="button" disabled={paying} onClick={() => finishPayment('FAILED')}>
+              پرداخت ناموفق
+            </button>
           </div>
         </div>
       </section>
