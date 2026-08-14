@@ -9,7 +9,7 @@ const navClassName = ({ isActive }) =>
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { user, isAuthenticated, isSupport, logout } = useAuth();
+  const { user, isAuthenticated, isSupport, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
 
   const closeMenu = () => setMenuOpen(false);
@@ -52,6 +52,7 @@ export default function Header() {
               پنل پشتیبانی
             </NavLink>
           )}
+          {isAdmin && <NavLink className={navClassName} to="/admin">مدیریت سامانه</NavLink>}
         </nav>
 
         {isAuthenticated ? (

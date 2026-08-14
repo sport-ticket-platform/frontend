@@ -12,6 +12,7 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import CancellationPage from './pages/CancellationPage.jsx';
 import ReportIssuePage from './pages/ReportIssuePage.jsx';
 import SupportPage from './pages/SupportPage.jsx';
+import AdminToolsPage from './pages/AdminToolsPage.jsx';
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
         </Route>
         <Route element={<SupportRoute />}>
           <Route path="support" element={<SupportPage />} />
+          <Route path="admin" element={<AdminToolsPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
