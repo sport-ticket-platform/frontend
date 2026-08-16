@@ -1,0 +1,24 @@
+services:
+  frontend:
+    image: mmdcj/frontend-service:latest
+    container_name: frontend
+    ports:
+      - "400:80"
+    environment:
+      AUTH_UPSTREAM: "http://authentication:8080"
+      USER_UPSTREAM: "http://user-service:8080"
+      EVENT_UPSTREAM: "http://event-service:8080"
+      RESERVATION_UPSTREAM: "http://reservation:8081"
+    restart: unless-stopped
+    networks:
+      - sportik-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  sportik-network:
+    driver: bridge
