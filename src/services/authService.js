@@ -2,15 +2,35 @@ import { apiConfig } from './apiConfig.js';
 import { apiRequest } from './apiClient.js';
 import { storage } from './storage.js';
 
-const unwrap = (payload) => payload?.data ?? payload;
+const unwrap = (payload) =>
+  payload?.data ?? payload;
+
+function normalizeToken(value) {
+  if (typeof value !== 'string') return '';
+
+  return value
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .trim();
+}
 
 function decodeJwtPayload(token) {
   try {
-    const encodedPayload = token.split('.')[1];
+    const encodedPayload =
+      token.split('.')[1];
+
     if (!encodedPayload) return {};
 
-    const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const base64 = encodedPayload
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+
+    const padded =
+      base64
+      + '='.repeat(
+        (4 - (base64.length % 4)) % 4,
+      );
+
     return JSON.parse(atob(padded));
   } catch {
     return {};
@@ -20,29 +40,47 @@ function decodeJwtPayload(token) {
 function normalizeRole(claims) {
   const roles = Array.isArray(claims.roles)
     ? claims.roles
-    : [claims.roles || claims.role].filter(Boolean);
+    : [claims.roles || claims.role]
+      .filter(Boolean);
 
   return String(roles[0] || 'USER')
     .replace(/^ROLE_/, '')
     .toUpperCase();
 }
 
-function buildUserFromToken(accessToken, identifier = '') {
-  const claims = decodeJwtPayload(accessToken);
+function buildUserFromToken(
+  accessToken,
+  identifier = '',
+) {
+  const claims =
+    decodeJwtPayload(accessToken);
 
   return {
     userId: String(claims.sub || ''),
+
     firstName: 'کاربر',
     lastName: '',
-    email: identifier.includes('@') ? identifier : '',
-    phoneNumber: identifier.includes('@') ? '' : identifier,
+
+    email: identifier.includes('@')
+      ? identifier
+      : '',
+
+    phoneNumber: identifier.includes('@')
+      ? ''
+      : identifier,
+
     role: normalizeRole(claims),
   };
 }
 
-async function fetchBackendProfile(fallbackUser) {
+async function fetchBackendProfile(
+  fallbackUser,
+) {
   try {
-    const payload = await apiRequest(`${apiConfig.userBaseUrl}/profile`);
+    const payload = await apiRequest(
+      `${apiConfig.userBaseUrl}/profile`,
+    );
+
     const profile = unwrap(payload) || {};
 
     return {
@@ -51,79 +89,164 @@ async function fetchBackendProfile(fallbackUser) {
       userId: fallbackUser.userId,
       role: fallbackUser.role,
     };
-  } catch {
+  } catch (error) {
+
+    if ([401, 403].includes(error.status)) {
+      throw error;
+    }
+
     return fallbackUser;
   }
 }
 
-async function exchangeRefreshToken(refreshToken) {
-  const payload = await apiRequest(`${apiConfig.authBaseUrl}/refresh`, {
-    method: 'POST',
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  }, false);
+async function exchangeRefreshToken(
+  refreshToken,
+) {
+  const payload = await apiRequest(
+    `${apiConfig.authBaseUrl}/refresh`,
+    {
+      method: 'POST',
+
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+      }),
+    },
+    false,
+  );
 
   const data = unwrap(payload);
-  if (!data?.access_token) {
-    throw new Error('توکن دسترسی از سرور دریافت نشد.');
+
+  const accessToken = normalizeToken(
+    data?.access_token,
+  );
+
+  if (!accessToken) {
+    throw new Error(
+      'توکن دسترسی از سرور دریافت نشد.',
+    );
   }
 
-  storage.set('accessToken', data.access_token);
-  storage.set('refreshToken', data.refresh_token || refreshToken);
+  storage.set(
+    'accessToken',
+    accessToken,
+  );
 
-  return data;
+  storage.set(
+    'refreshToken',
+    data.refresh_token || refreshToken,
+  );
+
+  return {
+    ...data,
+    access_token: accessToken,
+  };
 }
 
-async function finishBackendLogin(payload, identifier = '') {
+async function finishBackendLogin(
+  payload,
+  identifier = '',
+) {
   const data = unwrap(payload) || {};
 
   storage.remove('accessToken');
   storage.remove('user');
 
-  let accessToken = data.access_token || '';
-  let refreshToken = data.refresh_token || '';
+  let accessToken = normalizeToken(
+    data.access_token,
+  );
 
-  if (refreshToken) storage.set('refreshToken', refreshToken);
+  let refreshToken =
+    normalizeToken(data.refresh_token);
+
+  if (refreshToken) {
+    storage.set(
+      'refreshToken',
+      refreshToken,
+    );
+  }
 
   if (!accessToken && refreshToken) {
-    const refreshed = await exchangeRefreshToken(refreshToken);
-    accessToken = refreshed.access_token;
-    refreshToken = refreshed.refresh_token || refreshToken;
+    const refreshed =
+      await exchangeRefreshToken(
+        refreshToken,
+      );
+
+    accessToken =
+      refreshed.access_token;
+
+    refreshToken =
+      refreshed.refresh_token
+      || refreshToken;
   } else if (accessToken) {
-    storage.set('accessToken', accessToken);
+    storage.set(
+      'accessToken',
+      accessToken,
+    );
   }
 
   if (!accessToken) {
     storage.remove('refreshToken');
-    throw new Error('اطلاعات نشست از سرور دریافت نشد.');
+
+    throw new Error(
+      'اطلاعات نشست از سرور دریافت نشد.',
+    );
   }
 
-  const tokenUser = buildUserFromToken(accessToken, identifier);
-  const user = await fetchBackendProfile(tokenUser);
+  const tokenUser =
+    buildUserFromToken(
+      accessToken,
+      identifier,
+    );
+  const user = await fetchBackendProfile(
+    tokenUser,
+  );
+
   storage.set('user', user);
 
   return {
     user,
     access_token: accessToken,
-    refresh_token: refreshToken || storage.get('refreshToken'),
+
+    refresh_token:
+      refreshToken
+      || storage.get('refreshToken'),
   };
 }
 
 function requireToken(value, message) {
-  if (!value) throw new Error(message);
+  if (!value) {
+    throw new Error(message);
+  }
+
   return value;
 }
 
 export const authService = {
-  async loginWithPassword(identifier, password) {
+  async loginWithPassword(
+    identifier,
+    password,
+  ) {
     storage.clearSession();
 
-    const payload = await apiRequest(`${apiConfig.authBaseUrl}/login-password`, {
-      method: 'POST',
-      body: JSON.stringify({ identifier, password }),
-    });
+    const payload = await apiRequest(
+      `${apiConfig.authBaseUrl}/login-password`,
+      {
+        method: 'POST',
+
+        body: JSON.stringify({
+          identifier,
+          password,
+        }),
+      },
+    );
+
     const data = unwrap(payload) || {};
 
-    if (data.mfa_token && String(data.step || '').startsWith('2FA')) {
+    if (
+      data.mfa_token
+      && String(data.step || '')
+        .startsWith('2FA')
+    ) {
       return {
         requiresOtp: true,
         mfa: data.mfa_token,
@@ -131,24 +254,39 @@ export const authService = {
       };
     }
 
-    return finishBackendLogin(payload, identifier);
+    return finishBackendLogin(
+      payload,
+      identifier,
+    );
   },
 
   async requestOtp(identifier) {
     storage.clearSession();
 
-    const isEmail = identifier.includes('@');
-    const endpoint = isEmail ? 'login-otp-email' : 'login-otp-phone';
-    const body = isEmail ? { email: identifier } : { phone: identifier };
+    const isEmail =
+      identifier.includes('@');
 
-    const payload = await apiRequest(`${apiConfig.authBaseUrl}/${endpoint}`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
+    const endpoint = isEmail
+      ? 'login-otp-email'
+      : 'login-otp-phone';
+
+    const body = isEmail
+      ? { email: identifier }
+      : { phone: identifier };
+
+    const payload = await apiRequest(
+      `${apiConfig.authBaseUrl}/${endpoint}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+    );
+
     const data = unwrap(payload) || {};
 
     return {
       ...data,
+
       mfa: requireToken(
         data.mfa_token || data.mfa,
         'توکن تأیید کد یک‌بارمصرف از سرور دریافت نشد.',
@@ -156,14 +294,30 @@ export const authService = {
     };
   },
 
-  async verifyOtp(identifier, mfa, otp) {
-    const payload = await apiRequest(`${apiConfig.authBaseUrl}/verify`, {
-      method: 'POST',
-      body: JSON.stringify({ mfa, otp }),
-    });
+  async verifyOtp(
+    identifier,
+    mfa,
+    otp,
+  ) {
+    const payload = await apiRequest(
+      `${apiConfig.authBaseUrl}/verify`,
+      {
+        method: 'POST',
+
+        body: JSON.stringify({
+          mfa,
+          otp,
+        }),
+      },
+    );
+
     const data = unwrap(payload) || {};
 
-    if (data.mfa_token && String(data.step || '').startsWith('2FA')) {
+    if (
+      data.mfa_token
+      && String(data.step || '')
+        .startsWith('2FA')
+    ) {
       return {
         requiresOtp: true,
         mfa: data.mfa_token,
@@ -171,18 +325,29 @@ export const authService = {
       };
     }
 
-    return finishBackendLogin(payload, identifier);
+    return finishBackendLogin(
+      payload,
+      identifier,
+    );
   },
 
   async signupInitiate(email) {
-    const payload = await apiRequest(`${apiConfig.authBaseUrl}/signup/initiate`, {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
+    const payload = await apiRequest(
+      `${apiConfig.authBaseUrl}/signup/initiate`,
+      {
+        method: 'POST',
+
+        body: JSON.stringify({
+          email,
+        }),
+      },
+    );
+
     const data = unwrap(payload) || {};
 
     return {
       ...data,
+
       mfa_token: requireToken(
         data.mfa_token,
         'توکن تأیید ثبت‌نام از سرور دریافت نشد.',
@@ -191,14 +356,23 @@ export const authService = {
   },
 
   async signupVerify(token, otp) {
-    const payload = await apiRequest(`${apiConfig.authBaseUrl}/signup/verify`, {
-      method: 'POST',
-      body: JSON.stringify({ mfa: token, otp }),
-    });
+    const payload = await apiRequest(
+      `${apiConfig.authBaseUrl}/signup/verify`,
+      {
+        method: 'POST',
+
+        body: JSON.stringify({
+          mfa: token,
+          otp,
+        }),
+      },
+    );
+
     const data = unwrap(payload) || {};
 
     return {
       ...data,
+
       temp_token: requireToken(
         data.temp_token,
         'توکن موقت تکمیل ثبت‌نام از سرور دریافت نشد.',
@@ -206,24 +380,47 @@ export const authService = {
     };
   },
 
-  async signupComplete({ tempToken, firstName, lastName, password, email }) {
-    await apiRequest(`${apiConfig.authBaseUrl}/signup/complete`, {
-      method: 'POST',
-      body: JSON.stringify({
-        temp_token: tempToken,
-        first_name: firstName,
-        last_name: lastName,
-        password,
-      }),
-    });
+  async signupComplete({
+    tempToken,
+    firstName,
+    lastName,
+    password,
+    email,
+  }) {
+    await apiRequest(
+      `${apiConfig.authBaseUrl}/signup/complete`,
+      {
+        method: 'POST',
 
-    const loginPayload = await apiRequest(`${apiConfig.authBaseUrl}/login-password`, {
-      method: 'POST',
-      body: JSON.stringify({ identifier: email, password }),
-    });
-    const loginData = unwrap(loginPayload) || {};
+        body: JSON.stringify({
+          temp_token: tempToken,
+          first_name: firstName,
+          last_name: lastName,
+          password,
+        }),
+      },
+    );
 
-    if (loginData.mfa_token && String(loginData.step || '').startsWith('2FA')) {
+    const loginPayload = await apiRequest(
+      `${apiConfig.authBaseUrl}/login-password`,
+      {
+        method: 'POST',
+
+        body: JSON.stringify({
+          identifier: email,
+          password,
+        }),
+      },
+    );
+
+    const loginData =
+      unwrap(loginPayload) || {};
+
+    if (
+      loginData.mfa_token
+      && String(loginData.step || '')
+        .startsWith('2FA')
+    ) {
       return {
         requiresOtp: true,
         mfa: loginData.mfa_token,
@@ -232,45 +429,83 @@ export const authService = {
       };
     }
 
-    return finishBackendLogin(loginPayload, email);
+    return finishBackendLogin(
+      loginPayload,
+      email,
+    );
   },
 
   async resetPasswordInitiate(email) {
-    const payload = await apiRequest(`${apiConfig.authBaseUrl}/reset-password/initiate`, {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
+    const payload = await apiRequest(
+      `${apiConfig.authBaseUrl}/reset-password/initiate`,
+      {
+        method: 'POST',
+
+        body: JSON.stringify({
+          email,
+        }),
+      },
+    );
+
     return unwrap(payload) || {};
   },
 
-  async resetPasswordVerify(mfa, otp) {
-    const payload = await apiRequest(`${apiConfig.authBaseUrl}/reset-password/verify`, {
-      method: 'POST',
-      body: JSON.stringify({ mfa, otp }),
-    });
+  async resetPasswordVerify(
+    mfa,
+    otp,
+  ) {
+    const payload = await apiRequest(
+      `${apiConfig.authBaseUrl}/reset-password/verify`,
+      {
+        method: 'POST',
+
+        body: JSON.stringify({
+          mfa,
+          otp,
+        }),
+      },
+    );
+
     return unwrap(payload) || {};
   },
 
-  async resetPasswordComplete(tempToken, password) {
-    await apiRequest(`${apiConfig.authBaseUrl}/reset-password/complete`, {
-      method: 'POST',
-      body: JSON.stringify({ temp_token: tempToken, password }),
-    });
+  async resetPasswordComplete(
+    tempToken,
+    password,
+  ) {
+    await apiRequest(
+      `${apiConfig.authBaseUrl}/reset-password/complete`,
+      {
+        method: 'POST',
+
+        body: JSON.stringify({
+          temp_token: tempToken,
+          password,
+        }),
+      },
+    );
   },
 
   async logout() {
-    const refreshToken = storage.get('refreshToken');
+    const refreshToken =
+      storage.get('refreshToken');
 
-    if (refreshToken) {
-      try {
-        await apiRequest(`${apiConfig.authBaseUrl}/logout`, {
-          method: 'POST',
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        }, false);
-      } catch {
+    try {
+      if (refreshToken) {
+        await apiRequest(
+          `${apiConfig.authBaseUrl}/logout`,
+          {
+            method: 'POST',
+
+            body: JSON.stringify({
+              refresh_token: refreshToken,
+            }),
+          },
+          false,
+        );
       }
+    } finally {
+      storage.clearSession();
     }
-
-    storage.clearSession();
   },
 };
