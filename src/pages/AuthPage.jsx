@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { KeyRound, LogIn, UserPlus } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Circle, Eye, EyeOff, KeyRound, LogIn, UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const emptySignup = {
@@ -9,6 +9,45 @@ const emptySignup = {
   lastName: '',
   password: '',
 };
+
+function PasswordCriteriaIndicator({ value, touched, showAll = false }) {
+  const hasStartedTyping = value.length >= 4 || showAll || (touched && value.length > 0);
+
+  const lengthOk = value.length >= 8 && value.length <= 32;
+  const upperLowerOk = /[a-z]/.test(value) && /[A-Z]/.test(value);
+  const numberOk = /\d/.test(value);
+
+  // Checks for invalid/non-standard characters (only standard ascii printable characters are standard for passwords)
+  // Allowed: ascii 33 to 126 (letters, digits, standard punctuation)
+  const hasInvalidChar = /[^\x21-\x7E]/.test(value);
+
+  if (!hasStartedTyping && !hasInvalidChar) {
+    return null;
+  }
+
+  return (
+    <div className="password-requirements">
+      {hasInvalidChar && (
+        <div className="password-req-item warning">
+          <AlertCircle size={14} />
+          <span>فقط از حروف انگلیسی، اعداد و علائم مجاز استفاده کنید.</span>
+        </div>
+      )}
+      <div className={`password-req-item ${lengthOk ? 'valid' : (touched || value.length >= 4) ? 'invalid' : ''}`}>
+        {lengthOk ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+        <span>حداقل ۸ کاراکتر</span>
+      </div>
+      <div className={`password-req-item ${upperLowerOk ? 'valid' : (touched || value.length >= 4) ? 'invalid' : ''}`}>
+        {upperLowerOk ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+        <span>حداقل یک حرف بزرگ (A-Z) و یک حرف کوچک (a-z) انگلیسی</span>
+      </div>
+      <div className={`password-req-item ${numberOk ? 'valid' : (touched || value.length >= 4) ? 'invalid' : ''}`}>
+        {numberOk ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+        <span>حداقل یک عدد (0-9)</span>
+      </div>
+    </div>
+  );
+}
 
 export default function AuthPage() {
   const [mode, setMode] = useState('password');
@@ -25,6 +64,11 @@ export default function AuthPage() {
   const [resetToken, setResetToken] = useState('');
   const [resetTempToken, setResetTempToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [signupTouched, setSignupTouched] = useState(false);
+  const [resetTouched, setResetTouched] = useState(false);
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -173,8 +217,31 @@ export default function AuthPage() {
     }
   };
 
+  const validatePassword = (pwd) => {
+    const lengthOk = pwd.length >= 8 && pwd.length <= 32;
+    const upperLowerOk = /[a-z]/.test(pwd) && /[A-Z]/.test(pwd);
+    const numberOk = /\d/.test(pwd);
+    const hasInvalidChar = /[^\x21-\x7E]/.test(pwd);
+
+    if (hasInvalidChar) {
+      return 'رمز عبور فقط باید شامل حروف انگلیسی، اعداد و علائم مجاز باشد.';
+    }
+    if (!lengthOk || !upperLowerOk || !numberOk) {
+      return 'رمز عبور باید حداقل ۸ کاراکتر و شامل حروف بزرگ، کوچک و عدد باشد.';
+    }
+    return null;
+  };
+
   const finishSignup = async (event) => {
     event.preventDefault();
+    setSignupTouched(true);
+
+    const validationError = validatePassword(signup.password);
+    if (validationError) {
+      setMessage({ type: 'error', text: validationError });
+      return;
+    }
+
     setLoading(true);
     setMessage(null);
 
@@ -232,6 +299,14 @@ export default function AuthPage() {
 
   const completePasswordReset = async (event) => {
     event.preventDefault();
+    setResetTouched(true);
+
+    const validationError = validatePassword(newPassword);
+    if (validationError) {
+      setMessage({ type: 'error', text: validationError });
+      return;
+    }
+
     setLoading(true);
     setMessage(null);
     try {
@@ -305,16 +380,27 @@ export default function AuthPage() {
               </label>
               <label>
                 رمز عبور
-                <input
-                  required
-                  minLength={1}
-                  maxLength={32}
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="رمز عبور حساب"
-                  autoComplete="current-password"
-                />
+                <div className="password-field-wrapper">
+                  <input
+                    required
+                    minLength={1}
+                    maxLength={32}
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="رمز عبور حساب"
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    title={showPassword ? 'مخفی‌کردن رمز عبور' : 'نمایش رمز عبور'}
+                    aria-label={showPassword ? 'مخفی‌کردن رمز عبور' : 'نمایش رمز عبور'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </label>
               <button className="auth-submit" type="submit" disabled={loading}>
                 <LogIn size={18} />
@@ -345,9 +431,33 @@ export default function AuthPage() {
           )}
 
           {mode === 'reset' && resetStep === 3 && (
-            <form className="auth-form" onSubmit={completePasswordReset} aria-busy={loading}>
+            <form className="auth-form" onSubmit={completePasswordReset} aria-busy={loading} noValidate>
               <label>رمز عبور جدید
-                <input required type="password" minLength={8} maxLength={32} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,32}" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+                <div className="password-field-wrapper">
+                  <input
+                    required
+                    type={showResetPassword ? 'text' : 'password'}
+                    minLength={8}
+                    maxLength={32}
+                    value={newPassword}
+                    onChange={(event) => {
+                      setNewPassword(event.target.value);
+                      if (message?.type === 'error') setMessage(null);
+                    }}
+                    placeholder="۸ تا ۳۲ کاراکتر؛ شامل حرف بزرگ، کوچک و عدد"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowResetPassword((prev) => !prev)}
+                    title={showResetPassword ? 'مخفی‌کردن رمز عبور' : 'نمایش رمز عبور'}
+                    aria-label={showResetPassword ? 'مخفی‌کردن رمز عبور' : 'نمایش رمز عبور'}
+                  >
+                    {showResetPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <PasswordCriteriaIndicator value={newPassword} touched={resetTouched} />
               </label>
               <button className="auth-submit" type="submit" disabled={loading}>ثبت رمز جدید</button>
             </form>
@@ -441,7 +551,7 @@ export default function AuthPage() {
           )}
 
           {mode === 'signup' && signupStep === 3 && (
-            <form className="auth-form" onSubmit={finishSignup} aria-busy={loading}>
+            <form className="auth-form" onSubmit={finishSignup} aria-busy={loading} noValidate>
               <div className="auth-two-fields">
                 <label>
                   نام
@@ -468,18 +578,31 @@ export default function AuthPage() {
               </div>
               <label>
                 رمز عبور
-                <input
-                  required
-                  minLength={8}
-                  maxLength={32}
-                  pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,32}"
-                  type="password"
-                  value={signup.password}
-                  onChange={(event) => setSignup({ ...signup, password: event.target.value })}
-                  placeholder="۸ تا ۳۲ کاراکتر؛ شامل حرف بزرگ، کوچک و عدد"
-                  title="رمز باید حداقل یک حرف انگلیسی بزرگ، یک حرف کوچک و یک عدد داشته باشد."
-                  autoComplete="new-password"
-                />
+                <div className="password-field-wrapper">
+                  <input
+                    required
+                    minLength={8}
+                    maxLength={32}
+                    type={showSignupPassword ? 'text' : 'password'}
+                    value={signup.password}
+                    onChange={(event) => {
+                      setSignup({ ...signup, password: event.target.value });
+                      if (message?.type === 'error') setMessage(null);
+                    }}
+                    placeholder="۸ تا ۳۲ کاراکتر؛ شامل حرف بزرگ، کوچک و عدد"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowSignupPassword((prev) => !prev)}
+                    title={showSignupPassword ? 'مخفی‌کردن رمز عبور' : 'نمایش رمز عبور'}
+                    aria-label={showSignupPassword ? 'مخفی‌کردن رمز عبور' : 'نمایش رمز عبور'}
+                  >
+                    {showSignupPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <PasswordCriteriaIndicator value={signup.password} touched={signupTouched} />
               </label>
               <button className="auth-submit" type="submit" disabled={loading}>
                 {loading ? 'در حال ساخت حساب...' : 'ساخت حساب'}

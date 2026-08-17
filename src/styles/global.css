@@ -1256,6 +1256,70 @@ p {
 .auth-form input:focus {
   border-color: var(--primary);
 }
+.auth-form .password-field-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.auth-form .password-field-wrapper input {
+  padding-left: 40px;
+}
+.auth-form .password-toggle-btn {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #777;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+.auth-form .password-toggle-btn:hover {
+  color: var(--primary);
+}
+.password-requirements {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: #f9fbf9;
+  border: 1px solid #e2ebe4;
+  border-radius: 6px;
+  font-size: 12px;
+  animation: fadeInReq 0.2s ease-in-out;
+}
+@keyframes fadeInReq {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.password-req-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #71717a;
+  transition: color 0.2s;
+}
+.password-req-item.valid {
+  color: #16a34a;
+  font-weight: 600;
+}
+.password-req-item.invalid {
+  color: #dc2626;
+  font-weight: 600;
+}
+.password-req-item.warning {
+  color: #d97706;
+  font-weight: 600;
+}
+.password-req-item svg {
+  flex-shrink: 0;
+}
 .auth-form .otp-field {
   direction: ltr;
   text-align: center;

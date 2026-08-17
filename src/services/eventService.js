@@ -228,11 +228,15 @@ async function getSeats(configIds) {
   const params = new URLSearchParams();
   configIds.forEach((id) => params.append('ConfigIds', String(id)));
 
-  const payload = await apiRequest(
-    `${apiConfig.eventBaseUrl}/match/configs/seats?${params.toString()}`,
-  );
-  const seats = unwrap(payload);
-  return Array.isArray(seats) ? seats : [];
+  try {
+    const payload = await apiRequest(
+      `${apiConfig.eventBaseUrl}/match/configs/seats?${params.toString()}`,
+    );
+    const seats = unwrap(payload);
+    return Array.isArray(seats) ? seats : [];
+  } catch {
+    return [];
+  }
 }
 
 async function enrichMatches(matches) {
@@ -266,27 +270,58 @@ export const eventService = {
   },
 
   async getMatchDetails(matchId) {
+    const numericMatchId = Number(matchId);
+
     let match = matchCache.find(
-      (item) => String(item.matchId) === String(matchId),
+      (item) => Number(item.matchId || item.id) === numericMatchId,
     );
 
     if (!match) {
-      const payload = await apiRequest(
-        `${apiConfig.eventBaseUrl}/match?limit=40&offset=0`,
-      );
-      const matches = Array.isArray(unwrap(payload)) ? unwrap(payload) : [];
-      matchCache = matches;
-      match = matches.find(
-        (item) => String(item.matchId) === String(matchId),
-      );
+      try {
+        // First try searching via POST /match
+        const payload = await apiRequest(`${apiConfig.eventBaseUrl}/match`, {
+          method: 'POST',
+          body: JSON.stringify({ limit: 100, offset: 0 }),
+        });
+        const matches = Array.isArray(unwrap(payload)) ? unwrap(payload) : [];
+        matchCache = matches;
+        match = matches.find(
+          (item) => Number(item.matchId || item.id) === numericMatchId,
+        );
+      } catch {
+        // Fallback to GET /match
+        try {
+          const fallbackPayload = await apiRequest(
+            `${apiConfig.eventBaseUrl}/match?limit=100&offset=0`,
+          );
+          const fallbackMatches = Array.isArray(unwrap(fallbackPayload))
+            ? unwrap(fallbackPayload)
+            : [];
+          matchCache = fallbackMatches;
+          match = fallbackMatches.find(
+            (item) => Number(item.matchId || item.id) === numericMatchId,
+          );
+        } catch {
+          // ignore fallback error
+        }
+      }
     }
 
     if (!match) return null;
 
-    const configs = await getConfigs(match.matchId);
-    const seats = await getSeats(
-      configs.map((config) => config.configId),
-    );
+    let configs = [];
+    let seats = [];
+
+    try {
+      configs = await getConfigs(match.matchId || matchId);
+      if (configs.length > 0) {
+        seats = await getSeats(
+          configs.map((config) => config.configId),
+        );
+      }
+    } catch {
+      // If configs or seats fail, still return match details
+    }
 
     return normalizeMatch(match, configs, seats);
   },
