@@ -8,12 +8,12 @@ export default defineConfig({
     host: true,
     proxy: {
       '/auth-api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:7070',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/auth-api/, ''),
       },
       '/user-api': {
-        target: 'http://localhost:5268',
+        target: 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/user-api/, ''),
       },
