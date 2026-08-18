@@ -9,6 +9,7 @@ import TicketDetailsPage from './pages/TicketDetailsPage.jsx';
 import AuthPage from './pages/AuthPage.jsx';
 import CheckoutPage from './pages/CheckoutPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
+import ReservationDetailPage from './pages/ReservationDetailPage.jsx';
 import ReportIssuePage from './pages/ReportIssuePage.jsx';
 import SupportPage from './pages/SupportPage.jsx';
 import AdminToolsPage from './pages/AdminToolsPage.jsx';
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="tickets/:ticketId" element={<TicketDetailsPage />} />
           <Route path="checkout/:ticketId" element={<CheckoutPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="dashboard/reservations/:reservationId" element={<ReservationDetailPage />} />
           <Route path="dashboard/bookings/:bookingId/report" element={<ReportIssuePage />} />
         </Route>
         <Route element={<SupportRoute />}>

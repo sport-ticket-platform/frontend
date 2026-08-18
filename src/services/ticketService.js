@@ -328,6 +328,61 @@ export const ticketService = {
     };
   },
 
+  async getReservationHistory(page = 0, pageSize = 10, status = null) {
+    let url = `${apiConfig.reservationBaseUrl}/reserve/history?page=${page}&page_size=${pageSize}`;
+    if (status) url += `&status=${status}`;
+    const payload = await apiRequest(url);
+    const result = unwrap(payload) || {};
+    return {
+      items: Array.isArray(result.data) ? result.data : [],
+      currentPage: result.current_page ?? 0,
+      pageSize: result.page_size ?? pageSize,
+      totalElements: result.total_elements ?? 0,
+      totalPages: result.total_pages ?? 1,
+      isFirst: result.is_first ?? true,
+      isLast: result.is_last ?? true,
+    };
+  },
+
+  async getReservationCounts() {
+    const statuses = ['ACTIVE', 'EXPIRED', 'COMPLETED', 'CANCELLED'];
+    const results = await Promise.all(
+      statuses.map((status) =>
+        apiRequest(
+          `${apiConfig.reservationBaseUrl}/reserve/history?page=0&page_size=1&status=${status}`,
+        )
+          .then((payload) => {
+            const result = unwrap(payload) || {};
+            return { status, count: result.total_elements ?? 0 };
+          })
+          .catch(() => ({ status, count: 0 })),
+      ),
+    );
+    const counts = {};
+    let total = 0;
+    for (const { status, count } of results) {
+      counts[status] = count;
+      total += count;
+    }
+    counts.ALL = total;
+    return counts;
+  },
+
+  async getReservationById(reservationId) {
+    const payload = await apiRequest(
+      `${apiConfig.reservationBaseUrl}/reserve/${reservationId}`,
+    );
+    return unwrap(payload) || {};
+  },
+
+  async cancelReservation(reservationId) {
+    const payload = await apiRequest(
+      `${apiConfig.reservationBaseUrl}/reserve/${reservationId}/cancel`,
+      { method: 'PUT' },
+    );
+    return unwrap(payload);
+  },
+
   async getReports() {
     const payload = await apiRequest(`${apiConfig.userBaseUrl}/report`);
     const reports = unwrap(payload);

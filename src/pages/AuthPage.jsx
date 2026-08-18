@@ -132,7 +132,28 @@ export default function AuthPage() {
         finishLogin();
       }
     } catch (error) {
-      showError(error);
+      const msg = (error.message || '').toLowerCase();
+      const isBadCredential =
+        error.status === 401
+        || msg.includes('credentials')
+        || msg.includes('bad credentials')
+        || msg.includes('ورودی')
+        || msg.includes('نام کاربری')
+        || msg.includes('رمز عبور اشتباه')
+        || msg.includes('identifier')
+        || msg.includes('password');
+
+      if (isBadCredential) {
+        const isEmail = identifier.includes('@');
+        setMessage({
+          type: 'error',
+          text: isEmail
+            ? 'ایمیل یا رمز عبور اشتباه است.'
+            : 'شماره تماس یا رمز عبور اشتباه است.',
+        });
+      } else {
+        showError(error);
+      }
     } finally {
       setLoading(false);
     }
@@ -149,6 +170,7 @@ export default function AuthPage() {
       setMessage({
         type: 'info',
         text: 'کد ورود ارسال شد.',
+        hint: 'پوشه اسپم خود را نیز بررسی کنید؛ در صورت عدم دریافت، با پشتیبانی تماس بگیرید.',
       });
     } catch (error) {
       showError(error);
@@ -192,6 +214,7 @@ export default function AuthPage() {
       setMessage({
         type: 'info',
         text: 'کد تأیید ایمیل ارسال شد.',
+        hint: 'پوشه اسپم خود را نیز بررسی کنید.',
       });
     } catch (error) {
       showError(error);
@@ -273,7 +296,11 @@ export default function AuthPage() {
       const result = await resetPasswordInitiate(resetEmail.trim());
       setResetToken(result.mfa_token);
       setResetStep(2);
-      setMessage({ type: 'info', text: 'کد بازیابی به ایمیل شما ارسال شد.' });
+      setMessage({
+        type: 'info',
+        text: 'کد بازیابی به ایمیل شما ارسال شد.',
+        hint: 'پوشه اسپم خود را نیز بررسی کنید؛ در صورت عدم دریافت، با پشتیبانی تماس بگیرید.',
+      });
     } catch (error) {
       showError(error);
     } finally {
@@ -363,6 +390,9 @@ export default function AuthPage() {
           {message && (
             <div className={`form-message ${message.type}`} role="status">
               {message.text}
+              {message.hint && (
+                <span className="form-message-hint">{message.hint}</span>
+              )}
             </div>
           )}
 

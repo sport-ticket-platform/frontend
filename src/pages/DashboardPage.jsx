@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  Ban,
   CalendarDays,
+  CalendarClock,
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   CreditCard,
+  Eye,
   Flag,
   MapPin,
   PencilLine,
@@ -12,11 +17,26 @@ import {
   UserRound,
 } from 'lucide-react';
 import Loading from '../components/Loading.jsx';
+import ReservationCountdown from '../components/ReservationCountdown.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ticketService } from '../services/ticketService.js';
 import { userService } from '../services/userService.js';
 
 const formatNumber = (value) => new Intl.NumberFormat('fa-IR').format(value || 0);
+
+const reservationStatusLabels = {
+  ACTIVE: 'فعال',
+  EXPIRED: 'منقضی‌شده',
+  COMPLETED: 'تکمیل‌شده',
+  CANCELLED: 'لغوشده',
+};
+
+const reservationStatusColors = {
+  ACTIVE: 'active',
+  EXPIRED: 'expired',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+};
 
 const paymentMethodLabels = {
   bank_card: 'کارت بانکی',
@@ -47,8 +67,15 @@ function formatDate(value) {
 
 export default function DashboardPage() {
   const { user, updateUser } = useAuth();
-  const [activeTab, setActiveTab] = useState('bookings');
+  const [activeTab, setActiveTab] = useState('reservations');
   const [bookings, setBookings] = useState([]);
+  const [reservations, setReservations] = useState([]);
+  const [reservationPage, setReservationPage] = useState(0);
+  const [reservationMeta, setReservationMeta] = useState({ totalPages: 1, isFirst: true, isLast: true });
+  const [reservationFilter, setReservationFilter] = useState('');
+  const [reservationCounts, setReservationCounts] = useState({});
+  const [reservationsLoading, setReservationsLoading] = useState(false);
+  const [cancellingId, setCancellingId] = useState(null);
   const [reports, setReports] = useState([]);
   const [profile, setProfile] = useState(user || {});
   const [cities, setCities] = useState([]);
@@ -83,6 +110,51 @@ export default function DashboardPage() {
       active = false;
     };
   }, [user]);
+
+  const loadReservations = async (page = 0, status = '') => {
+    setReservationsLoading(true);
+    try {
+      const result = await ticketService.getReservationHistory(page, 10, status || null);
+      setReservations(result.items);
+      setReservationMeta({
+        totalPages: result.totalPages,
+        isFirst: result.isFirst,
+        isLast: result.isLast,
+      });
+      setReservationPage(result.currentPage);
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      setReservationsLoading(false);
+    }
+  };
+
+  const loadCounts = () => {
+    ticketService.getReservationCounts().then(setReservationCounts).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadCounts();
+  }, []);
+
+  useEffect(() => {
+    loadReservations(0, reservationFilter);
+  }, [reservationFilter]);
+
+  const handleCancelReservation = async (reservationId) => {
+    if (!window.confirm('آیا مطمئن هستید که می‌خواهید این رزرو را لغو کنید؟')) return;
+    setCancellingId(reservationId);
+    try {
+      await ticketService.cancelReservation(reservationId);
+      setMessage({ type: 'info', text: 'رزرو با موفقیت لغو شد.' });
+      loadReservations(reservationPage, reservationFilter);
+      loadCounts();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'لغو رزرو انجام نشد.' });
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const stats = useMemo(() => ({
     count: bookings.length,
@@ -138,12 +210,20 @@ export default function DashboardPage() {
       <section className="container dashboard-layout">
         <aside className="dashboard-menu">
           <button
+            className={activeTab === 'reservations' ? 'active' : ''}
+            type="button"
+            onClick={() => setActiveTab('reservations')}
+          >
+            <CalendarClock size={18} />
+            رزروها
+          </button>
+          <button
             className={activeTab === 'bookings' ? 'active' : ''}
             type="button"
             onClick={() => setActiveTab('bookings')}
           >
             <TicketCheck size={18} />
-            خریدها و رزروها
+            سفارش‌ها
           </button>
           <button
             className={activeTab === 'profile' ? 'active' : ''}
@@ -202,11 +282,157 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {activeTab === 'reservations' && (
+            <section className="dashboard-panel">
+              <div className="dashboard-panel-title">
+                <div>
+                  <h2>رزروهای من</h2>
+                  <p>وضعیت رزروهای خود را مشاهده و پیگیری کنید.</p>
+                </div>
+              </div>
+
+              <div className="reservation-filters">
+                <button
+                  className={reservationFilter === '' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setReservationFilter('')}
+                >
+                  همه {reservationCounts.ALL !== undefined && <span className="filter-count">({formatNumber(reservationCounts.ALL)})</span>}
+                </button>
+                <button
+                  className={reservationFilter === 'ACTIVE' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setReservationFilter('ACTIVE')}
+                >
+                  فعال {reservationCounts.ACTIVE !== undefined && <span className="filter-count">({formatNumber(reservationCounts.ACTIVE)})</span>}
+                </button>
+                <button
+                  className={reservationFilter === 'COMPLETED' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setReservationFilter('COMPLETED')}
+                >
+                  تکمیل‌شده {reservationCounts.COMPLETED !== undefined && <span className="filter-count">({formatNumber(reservationCounts.COMPLETED)})</span>}
+                </button>
+                <button
+                  className={reservationFilter === 'EXPIRED' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setReservationFilter('EXPIRED')}
+                >
+                  منقضی‌شده {reservationCounts.EXPIRED !== undefined && <span className="filter-count">({formatNumber(reservationCounts.EXPIRED)})</span>}
+                </button>
+                <button
+                  className={reservationFilter === 'CANCELLED' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setReservationFilter('CANCELLED')}
+                >
+                  لغوشده {reservationCounts.CANCELLED !== undefined && <span className="filter-count">({formatNumber(reservationCounts.CANCELLED)})</span>}
+                </button>
+              </div>
+
+              {reservationsLoading ? (
+                <div className="dashboard-empty compact">
+                  <p>در حال بارگذاری...</p>
+                </div>
+              ) : reservations.length === 0 ? (
+                <div className="dashboard-empty compact">
+                  <CalendarClock size={34} />
+                  <h3>رزروی یافت نشد</h3>
+                  <p>
+                    {reservationFilter
+                      ? 'رزروی با این وضعیت وجود ندارد.'
+                      : 'هنوز رزروی ثبت نکرده‌اید.'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="reservation-history-list">
+                    {reservations.map((reservation) => {
+                      const isActive = reservation.status === 'ACTIVE';
+                      return (
+                        <article
+                          className={`reservation-history-item ${reservationStatusColors[reservation.status] || ''}`}
+                          key={reservation.reservation_id}
+                        >
+                          <div className="reservation-history-main">
+                            <div className="reservation-status-row">
+                              <span className={`reservation-status ${reservationStatusColors[reservation.status] || ''}`}>
+                                {reservationStatusLabels[reservation.status] || reservation.status}
+                              </span>
+                              {isActive && (
+                                <ReservationCountdown
+                                  expiresAt={reservation.expires_at}
+                                  onExpired={() => {
+                                    loadReservations(reservationPage, reservationFilter);
+                                    loadCounts();
+                                  }}
+                                />
+                              )}
+                            </div>
+                            <p>
+                              <CalendarDays size={15} />
+                              {' '}ثبت: {formatDate(reservation.created_at)}
+                            </p>
+                            <p>
+                              <CalendarClock size={15} />
+                              {' '}انقضا: {formatDate(reservation.expires_at)}
+                            </p>
+                          </div>
+                          <div className="reservation-history-actions">
+                            <Link
+                              className="reservation-detail-btn"
+                              to={`/dashboard/reservations/${reservation.reservation_id}`}
+                            >
+                              <Eye size={14} />
+                              جزئیات
+                            </Link>
+                            {isActive && (
+                              <button
+                                className="reservation-cancel-btn"
+                                type="button"
+                                disabled={cancellingId === reservation.reservation_id}
+                                onClick={() => handleCancelReservation(reservation.reservation_id)}
+                              >
+                                <Ban size={14} />
+                                {cancellingId === reservation.reservation_id ? 'در حال لغو...' : 'لغو رزرو'}
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  {reservationMeta.totalPages > 1 && (
+                    <div className="reservation-pagination">
+                      <button
+                        type="button"
+                        disabled={reservationMeta.isFirst}
+                        onClick={() => loadReservations(reservationPage - 1, reservationFilter)}
+                      >
+                        <ChevronRight size={16} />
+                        قبلی
+                      </button>
+                      <span>صفحه {(reservationPage + 1).toLocaleString('fa-IR')} از {reservationMeta.totalPages.toLocaleString('fa-IR')}</span>
+                      <button
+                        type="button"
+                        disabled={reservationMeta.isLast}
+                        onClick={() => loadReservations(reservationPage + 1, reservationFilter)}
+                      >
+                        بعدی
+                        <ChevronLeft size={16} />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
+
           {activeTab === 'bookings' && (
             <section className="dashboard-panel">
               <div className="dashboard-panel-title">
                 <div>
-                  <h2>خریدها و رزروها</h2>
+                  <h2>سفارش‌ها</h2>
                   <p>وضعیت بلیط و گزارش مشکلات را از این قسمت مدیریت کنید.</p>
                 </div>
                 <Link className="secondary-button dashboard-small-button" to="/tickets">
